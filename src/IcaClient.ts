@@ -7,6 +7,20 @@ import { VpManager } from './VpManager';
 import axios, { AxiosInstance } from 'axios';
 import * as dotenv from 'dotenv';
 import { prepareDidCommRequest, includeVpTokenInMessage, includeFileInMessage, getThidFromMessage, getDataResults } from 'gdc-common-utils-ts/utils/didcomm';
+import {
+  CreateOrgDidDocumentRequest,
+  IcaBundleResponseEntry,
+  IcaCreateOrgDidDocumentResponse,
+  IcaDidCommAttachment,
+  IcaDidCommResponse,
+  IcaJwk,
+  IcaLegalRepresentativeCredential,
+  IcaLegalRepresentativeCredentialSubject,
+  IcaOrganizationCredential,
+  IcaOrganizationCredentialSubject,
+  IcaVerifyTermsResource,
+  IcaVerifyTermsResponse
+} from './types';
 
 dotenv.config();
 
@@ -44,8 +58,8 @@ export class IcaClient {
     this.vpManager = new VpManager();
 
     this.baseUrl = config.baseUrl || process.env.ICA_BASE_URL || 'http://localhost:3310';
-    this.httpClient = config.httpClient || axios.create({ baseURL: this.baseUrl });
     this.fetchFn = config.fetch ?? (typeof fetch !== 'undefined' ? fetch : undefined);
+    this.httpClient = config.httpClient ?? (config.fetch ? undefined : axios.create({ baseURL: this.baseUrl }));
 
     this.retryTimes = config.retryTimes ?? 3;
     this.retryDelayMs = config.retryDelayMs ?? 1000;
@@ -101,7 +115,7 @@ export class IcaClient {
   }
 
   // Poll verify terms response (retry based on Retry-After or default interval)
-  async pollVerifyTermsResponse(thid: string): Promise<DidCommMessage> {
+  async pollVerifyTermsResponse(thid: string): Promise<IcaVerifyTermsResponse> {
     const url = `/ica/cds-${this.jurisdiction}/v1/${this.config.sector}/terms/pdf/contract/_verify-response?thid=${thid}`;
 
     for (let attempt = 0; attempt < this.retryTimes; attempt++) {
@@ -113,7 +127,7 @@ export class IcaClient {
       });
 
       if (response.status === 200) {
-        return response.data as DidCommMessage;
+        return response.data as IcaVerifyTermsResponse;
       }
 
       const retryAfterHeader = response.headers?.['retry-after'];
@@ -193,7 +207,7 @@ export class IcaClient {
     const response = await this.fetchFn(fetchUrl, fetchOptions);
     const contentType = response.headers.get('content-type') || '';
     let data: any;
-    if (contentType.includes('application/json')) {
+    if (contentType.includes('json')) {
       data = await response.json();
     } else {
       data = await response.text();
@@ -215,11 +229,142 @@ export class IcaClient {
     return response.data;
   }
 
+  private parseVcObject<T extends object>(vc: string | object | undefined): T | undefined {
+    if (!vc) return undefined;
+    if (typeof vc === 'string') {
+      try {
+        return JSON.parse(vc) as T;
+      } catch {
+        return undefined;
+      }
+    }
+    return vc as T;
+  }
+
+  private getResponseEntries<TResource>(response: IcaDidCommResponse<TResource> | undefined): Array<IcaBundleResponseEntry<TResource>> {
+    const data = response?.body?.data;
+    return Array.isArray(data) ? data : [];
+  }
+
+  private getEntryTypeNames(entry: IcaBundleResponseEntry<unknown>): string[] {
+    const typeNames: string[] = [];
+
+    if (typeof entry.type === 'string') {
+      typeNames.push(entry.type.toLowerCase());
+    }
+
+    const resource = entry.resource;
+    if (resource && typeof resource === 'object') {
+      const resourceType = (resource as { type?: unknown }).type;
+      if (Array.isArray(resourceType)) {
+        for (const value of resourceType) {
+          if (typeof value === 'string') {
+            typeNames.push(value.toLowerCase());
+          }
+        }
+      } else if (typeof resourceType === 'string') {
+        typeNames.push(resourceType.toLowerCase());
+      }
+    }
+
+    return typeNames;
+  }
+
+  private attachmentJwt(attachment: IcaDidCommAttachment): string | undefined {
+    const jwt = attachment.data?.json?.jwt;
+    return typeof jwt === 'string' ? jwt : undefined;
+  }
+
+  private attachmentNameMatches(attachment: IcaDidCommAttachment, patterns: string[]): boolean {
+    const text = [attachment.filename, attachment.id]
+      .filter((value): value is string => typeof value === 'string')
+      .join(' ')
+      .toLowerCase();
+
+    return patterns.some(pattern => text.includes(pattern));
+  }
+
+  private isCredentialResource(resource: unknown): resource is IcaOrganizationCredential | IcaLegalRepresentativeCredential {
+    return !!resource && typeof resource === 'object' && 'credentialSubject' in resource;
+  }
+
+  private isOrganizationCredentialEntry(entry: IcaBundleResponseEntry<IcaVerifyTermsResource>): entry is IcaBundleResponseEntry<IcaOrganizationCredential> {
+    return this.getEntryTypeNames(entry).some(typeName => typeName.includes('organization'));
+  }
+
+  private isLegalRepresentativeCredentialEntry(entry: IcaBundleResponseEntry<IcaVerifyTermsResource>): entry is IcaBundleResponseEntry<IcaLegalRepresentativeCredential> {
+    return this.getEntryTypeNames(entry).some(
+      typeName => typeName.includes('legalrepresentative') || typeName.includes('personcredential')
+    );
+  }
+
+  private extractDidDocumentFieldsFromVcs(
+    orgVcInput?: string | object,
+    controllerVcInput?: string | object
+  ): Partial<{
+    orgCredentialSubjectId: string;
+    orgCredentialSubjectUrl: string;
+    orgCredentialSubjectTaxID: string;
+    controllerCredentialSubjectSameAs: string;
+  }> {
+    const orgVc = this.parseVcObject<IcaOrganizationCredential>(orgVcInput);
+    const controllerVc = this.parseVcObject<IcaLegalRepresentativeCredential>(controllerVcInput);
+
+    const orgSubject = (orgVc?.credentialSubject || orgVc?.subject || {}) as Record<string, unknown>;
+    const controllerSubject = (controllerVc?.credentialSubject || controllerVc?.subject || {}) as Record<string, unknown>;
+
+    const orgCredentialSubjectId = typeof orgSubject?.id === 'string' ? orgSubject.id : undefined;
+    const orgCredentialSubjectUrl = typeof orgSubject?.url === 'string' ? orgSubject.url : undefined;
+    const orgCredentialSubjectTaxID = typeof orgSubject?.taxID === 'string' ? orgSubject.taxID : undefined;
+    const controllerCredentialSubjectSameAs = typeof controllerSubject?.sameAs === 'string'
+      ? controllerSubject.sameAs
+      : undefined;
+
+    return {
+      orgCredentialSubjectId,
+      orgCredentialSubjectUrl,
+      orgCredentialSubjectTaxID,
+      controllerCredentialSubjectSameAs
+    };
+  }
+
   // Create organization DID document (POST /entity/did/document/_create)
-  async createOrgDidDocument(orgData: any): Promise<{ thid: string; location: string }> {
+  async createOrgDidDocument(orgData: CreateOrgDidDocumentRequest): Promise<{ thid: string; location: string }> {
+    const org = orgData.organization;
+    const controller = orgData.controller;
+
+    if (!org?.publicKeyJwk) {
+      throw new Error('organization.publicKeyJwk is required for DID creation');
+    }
+    if (!controller?.publicKeyJwk) {
+      throw new Error('controller.publicKeyJwk is required for DID creation');
+    }
+    if (!controller.sameAs) {
+      throw new Error('controller.sameAs is required for DID creation');
+    }
+    const hasExplicitId = !!org.identifier;
+    const hasDerived = !!org.url && !!org.taxID;
+    if (!hasExplicitId && !hasDerived) {
+      throw new Error('organization identifier (explicit mode) or organization url + taxID (derived mode) is required');
+    }
+
     const message = new DidCommMessage();
     message.type = 'https://globaldatacare.es/didcomm/ica/entity/did/document/create-request/v1';
-    message.body = orgData; // e.g., { organizationName, publicKeys, etc. }
+    message.body = {
+      data: [
+        {
+          resource: {
+            organization: {
+              ...org
+            },
+            controller: {
+              sameAs: controller.sameAs,
+              publicKeyJwk: controller.publicKeyJwk
+            }
+          }
+        }
+      ]
+    };
 
     const url = `/ica/cds-${this.jurisdiction}/v1/${this.config.sector}/entity/did/document/_create`;
     const response = await this.request({
@@ -238,8 +383,53 @@ export class IcaClient {
     }
   }
 
+  async createOrgDidDocumentFromVcs(options: {
+    organizationVC?: string | object;
+    legalRepresentativeVC?: string | object;
+    organizationIdentifier?: string;
+    organizationUrl?: string;
+    organizationTaxID?: string;
+    organizationPublicKeyJwk: IcaJwk;
+    controllerSameAs?: string;
+    controllerPublicKeyJwk: IcaJwk;
+  }): Promise<{ thid: string; location: string }> {
+    const extracted = this.extractDidDocumentFieldsFromVcs(options.organizationVC, options.legalRepresentativeVC);
+
+    const organizationPublicKeyJwk = options.organizationPublicKeyJwk;
+    const organizationIdentifier = options.organizationIdentifier || extracted.orgCredentialSubjectId;
+    const controllerSameAs = options.controllerSameAs || extracted.controllerCredentialSubjectSameAs;
+
+    const organization: CreateOrgDidDocumentRequest['organization'] = {
+      publicKeyJwk: organizationPublicKeyJwk
+    };
+    if (organizationIdentifier) {
+      organization.identifier = organizationIdentifier;
+    } else {
+      organization.url = options.organizationUrl || extracted.orgCredentialSubjectUrl;
+      organization.taxID = options.organizationTaxID || extracted.orgCredentialSubjectTaxID;
+    }
+
+    if (!organization.publicKeyJwk || !options.controllerPublicKeyJwk || !controllerSameAs) {
+      throw new Error('Missing required DID document fields. Frontend must provide organization publicKeyJwk, controller publicKeyJwk, and controller sameAs.');
+    }
+
+    if (!organization.identifier && !(organization.url && organization.taxID)) {
+      throw new Error('Missing required organization identifier or organization url+taxID.');
+    }
+
+    const payload: CreateOrgDidDocumentRequest = {
+      organization,
+      controller: {
+        sameAs: controllerSameAs,
+        publicKeyJwk: options.controllerPublicKeyJwk
+      }
+    };
+
+    return this.createOrgDidDocument(payload);
+  }
+
   // Poll create org DID document response (POST /_create-response)
-  async pollCreateOrgDidDocumentResponse(thid: string): Promise<DidCommMessage> {
+  async pollCreateOrgDidDocumentResponse(thid: string): Promise<IcaCreateOrgDidDocumentResponse> {
     const url = `/ica/cds-${this.jurisdiction}/v1/${this.config.sector}/entity/did/document/_create-response?thid=${thid}`;
 
     for (let attempt = 0; attempt < this.retryTimes; attempt++) {
@@ -250,7 +440,7 @@ export class IcaClient {
         headers: { 'Content-Type': 'application/json' }
       });
       if (response.status === 200) {
-        return response.data as DidCommMessage;
+        return response.data as IcaCreateOrgDidDocumentResponse;
       }
 
       const retryAfterHeader = response.headers?.['retry-after'];
@@ -266,9 +456,81 @@ export class IcaClient {
   }
 
   // Shortcut to create org DID document and retrieve final DID document message
-  async getOrgDidDoc(orgData: any): Promise<DidCommMessage> {
+  async getOrgDidDoc(orgData: CreateOrgDidDocumentRequest): Promise<IcaCreateOrgDidDocumentResponse> {
     const { thid } = await this.createOrgDidDocument(orgData);
     return this.pollCreateOrgDidDocumentResponse(thid);
+  }
+
+  getCredentialsFromVerifyResponse(response: IcaVerifyTermsResponse): {
+    organizationCredential?: IcaOrganizationCredential;
+    legalRepresentativeCredential?: IcaLegalRepresentativeCredential;
+    allCredentials: Array<IcaOrganizationCredential | IcaLegalRepresentativeCredential>;
+  } {
+    const entries = this.getResponseEntries<IcaVerifyTermsResource>(response);
+    const allCredentials = entries
+      .map(entry => entry.resource)
+      .filter((resource): resource is IcaOrganizationCredential | IcaLegalRepresentativeCredential => this.isCredentialResource(resource));
+
+    const organizationCredential = entries.find(entry => this.isOrganizationCredentialEntry(entry))?.resource;
+    const legalRepresentativeCredential = entries.find(entry => this.isLegalRepresentativeCredentialEntry(entry))?.resource;
+
+    return {
+      organizationCredential,
+      legalRepresentativeCredential,
+      allCredentials
+    };
+  }
+
+  getOrganizationCredentialFromVerifyResponse(response: IcaVerifyTermsResponse): IcaOrganizationCredential | undefined {
+    return this.getCredentialsFromVerifyResponse(response).organizationCredential;
+  }
+
+  getLegalRepresentativeCredentialFromVerifyResponse(response: IcaVerifyTermsResponse): IcaLegalRepresentativeCredential | undefined {
+    return this.getCredentialsFromVerifyResponse(response).legalRepresentativeCredential;
+  }
+
+  getOrganizationInfoFromVerifyResponse(response: IcaVerifyTermsResponse): IcaOrganizationCredentialSubject | undefined {
+    return this.getOrganizationCredentialFromVerifyResponse(response)?.credentialSubject;
+  }
+
+  getLegalRepresentativeInfoFromVerifyResponse(response: IcaVerifyTermsResponse): IcaLegalRepresentativeCredentialSubject | undefined {
+    return this.getLegalRepresentativeCredentialFromVerifyResponse(response)?.credentialSubject;
+  }
+
+  getOrganizationInfoFromCredential(credentialInput: string | object): IcaOrganizationCredentialSubject | undefined {
+    return this.parseVcObject<IcaOrganizationCredential>(credentialInput)?.credentialSubject;
+  }
+
+  getLegalRepresentativeInfoFromCredential(credentialInput: string | object): IcaLegalRepresentativeCredentialSubject | undefined {
+    return this.parseVcObject<IcaLegalRepresentativeCredential>(credentialInput)?.credentialSubject;
+  }
+
+  getVcsFromResponse(response: IcaVerifyTermsResponse): {
+    organizationVC?: string;
+    legalRepresentativeVC?: string;
+    allVcs: string[];
+  } {
+    const attachments = Array.isArray(response.attachments) ? response.attachments : [];
+    const vcAttachments = attachments.filter(attachment => typeof this.attachmentJwt(attachment) === 'string');
+    const allVcs = vcAttachments
+      .map(attachment => this.attachmentJwt(attachment))
+      .filter((jwt): jwt is string => typeof jwt === 'string');
+
+    const fallbackOrganizationAttachment = vcAttachments[0];
+    const fallbackLegalRepresentativeAttachment = vcAttachments[1];
+
+    const organizationAttachment = vcAttachments.find(attachment =>
+      this.attachmentNameMatches(attachment, ['organization'])
+    ) || fallbackOrganizationAttachment;
+    const legalRepresentativeAttachment = vcAttachments.find(attachment =>
+      this.attachmentNameMatches(attachment, ['legalrepresentative', 'legal-representative'])
+    ) || fallbackLegalRepresentativeAttachment;
+
+    return {
+      organizationVC: organizationAttachment ? this.attachmentJwt(organizationAttachment) : undefined,
+      legalRepresentativeVC: legalRepresentativeAttachment ? this.attachmentJwt(legalRepresentativeAttachment) : undefined,
+      allVcs
+    };
   }
 
   // Prepare DIDComm request message

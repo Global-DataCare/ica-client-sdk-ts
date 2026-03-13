@@ -1,0 +1,186 @@
+export interface IcaJwk {
+  kty?: string;
+  [key: string]: unknown;
+}
+
+export interface IcaOperationOutcomeIssue {
+  severity?: string;
+  code?: string;
+  diagnostics?: string;
+  [key: string]: unknown;
+}
+
+export interface IcaOperationOutcome {
+  resourceType?: string;
+  issue?: IcaOperationOutcomeIssue[];
+  [key: string]: unknown;
+}
+
+export interface IcaDidCommAttachmentPayload {
+  format?: string;
+  jwt?: string;
+  [key: string]: unknown;
+}
+
+export interface IcaDidCommAttachmentData {
+  json?: IcaDidCommAttachmentPayload;
+  links?: string[];
+  base64?: string;
+  [key: string]: unknown;
+}
+
+export interface IcaDidCommAttachment {
+  id?: string;
+  format?: string;
+  media_type?: string;
+  filename?: string;
+  data?: IcaDidCommAttachmentData;
+  [key: string]: unknown;
+}
+
+export interface IcaBundleResponseEntry<TResource = unknown> {
+  type?: string;
+  response?: {
+    status?: string;
+    outcome?: IcaOperationOutcome;
+    [key: string]: unknown;
+  };
+  resource?: TResource;
+  [key: string]: unknown;
+}
+
+export interface IcaBundleResponseBody<TResource = unknown> {
+  resourceType?: string;
+  type?: string;
+  total?: number;
+  issues?: IcaOperationOutcome;
+  data?: Array<IcaBundleResponseEntry<TResource>>;
+  [key: string]: unknown;
+}
+
+export interface IcaDidCommResponse<TResource = unknown> {
+  jti?: string;
+  iss?: string;
+  aud?: string;
+  thid?: string;
+  type?: string;
+  attachments?: IcaDidCommAttachment[];
+  body?: IcaBundleResponseBody<TResource>;
+  [key: string]: unknown;
+}
+
+export interface IcaOrganizationCredentialSubject {
+  id?: string;
+  '@type'?: string;
+  legalName?: string;
+  taxID?: string;
+  sameAs?: string;
+  url?: string;
+  alternateName?: string;
+  additionalType?: string;
+  address?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface IcaLegalRepresentativeMemberOf {
+  '@type'?: string;
+  legalName?: string;
+  taxID?: string;
+  [key: string]: unknown;
+}
+
+export interface IcaLegalRepresentativeCredentialSubject {
+  id?: string;
+  '@type'?: string;
+  name?: string;
+  givenName?: string;
+  familyName?: string;
+  identifier?: string;
+  nationality?: string;
+  sameAs?: string;
+  alternateName?: string;
+  additionalType?: string;
+  hasOccupation?: Record<string, unknown>;
+  memberOf?: IcaLegalRepresentativeMemberOf;
+  [key: string]: unknown;
+}
+
+export interface IcaCredential<TSubject = Record<string, unknown>> {
+  id?: string;
+  '@context'?: string[];
+  type?: string[];
+  issuer?: string;
+  validFrom?: string;
+  meta?: Record<string, unknown>;
+  credentialSubject?: TSubject;
+  evidence?: unknown[];
+  proof?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export type IcaOrganizationCredential = IcaCredential<IcaOrganizationCredentialSubject>;
+export type IcaLegalRepresentativeCredential = IcaCredential<IcaLegalRepresentativeCredentialSubject>;
+
+export interface IcaFailedTermsVerificationResource {
+  id?: string;
+  type?: string;
+  thid?: string;
+  tenantId?: string;
+  jurisdiction?: string;
+  sector?: string;
+  section?: string;
+  format?: string;
+  resourceType?: string;
+  status?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  audit?: Record<string, unknown>;
+  content?: Array<Record<string, unknown>>;
+  [key: string]: unknown;
+}
+
+export type IcaVerifyTermsResource =
+  | IcaOrganizationCredential
+  | IcaLegalRepresentativeCredential
+  | IcaFailedTermsVerificationResource;
+
+export type IcaVerifyTermsResponse = IcaDidCommResponse<IcaVerifyTermsResource>;
+
+export interface CreateOrgDidDocumentRequest {
+  organization: {
+    identifier?: string;
+    url?: string;
+    taxID?: string;
+    publicKeyJwk: IcaJwk;
+  };
+  controller: {
+    sameAs: string;
+    publicKeyJwk: IcaJwk;
+  };
+}
+
+export interface IcaDidDocumentVerificationMethod {
+  id?: string;
+  type?: string;
+  controller?: string;
+  publicKeyJwk?: IcaJwk;
+  [key: string]: unknown;
+}
+
+export interface IcaDidDocument {
+  '@context'?: string[];
+  id?: string;
+  controller?: string;
+  verificationMethod?: IcaDidDocumentVerificationMethod[];
+  assertionMethod?: string[];
+  authentication?: string[];
+  [key: string]: unknown;
+}
+
+export interface IcaCreateOrgDidDocumentResource {
+  didDocument?: IcaDidDocument;
+  meta?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export type IcaCreateOrgDidDocumentResponse = IcaDidCommResponse<IcaCreateOrgDidDocumentResource>;
