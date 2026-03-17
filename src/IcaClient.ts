@@ -1,29 +1,32 @@
-// Copyright 2025 Antifraud Services Inc. under the Apache License, Version 2.0.
+// Copyright 2026 Antifraud Services Inc. under the Apache License, Version 2.0.
 // File: src/IcaClient.ts
 
-import { DidCommMessage, DidCommAttachment } from 'gdc-common-utils-ts/utils/didcomm';
+import type { DidCommAttachment, DidCommMessage } from 'gdc-common-utils-ts/utils/didcomm';
 import { VcManager } from './VcManager';
 import { VpManager } from './VpManager';
 import axios, { AxiosInstance } from 'axios';
-import * as dotenv from 'dotenv';
 import { prepareDidCommRequest, includeVpTokenInMessage, includeFileInMessage, getThidFromMessage, getDataResults } from 'gdc-common-utils-ts/utils/didcomm';
 import {
   CreateOrgDidDocumentRequest,
+  IcaConfiguredPublicKey,
   IcaBundleResponseEntry,
   IcaCreateOrgDidDocumentResponse,
   IcaDidCommAttachment,
+  IcaDidCommMessageMeta,
+  IcaCrypto,
+  IcaDidCommRequest,
   IcaDidCommResponse,
   IcaJwk,
+  IcaJwks,
   IcaLegalRepresentativeCredential,
   IcaLegalRepresentativeCredentialSubject,
   IcaOrganizationCredential,
   IcaOrganizationCredentialSubject,
+  IcaVerifyResponseKeyMaterial,
   IcaVerifyTermsResource,
-  IcaVerifyTermsResponse
+  IcaVerifyTermsResponse,
+  VerifyTermsOptions
 } from './types';
-
-dotenv.config();
-
 export enum Sector {
   AnimalCare = 'animal-care',
   HealthCare = 'health-care',
@@ -39,6 +42,7 @@ export interface IcaClientConfig {
   retryDelayMs?: number; // Default delay when Retry-After absent (default 1000ms)
   httpClient?: AxiosInstance; // Optional injectable axios client for tests
   fetch?: typeof fetch; // Optional fetch implementation (for non-axios environments)
+  crypto?: IcaCrypto; // Optional crypto implementation for UUID generation
 }
 
 export class IcaClient {
@@ -47,10 +51,13 @@ export class IcaClient {
   private vpManager: VpManager;
   private httpClient?: AxiosInstance;
   private fetchFn?: typeof fetch;
+  private cryptoApi?: IcaCrypto;
   private baseUrl: string;
   private jurisdiction: string = 'ES'; // Default, can be configurable
   private retryTimes: number;
   private retryDelayMs: number;
+  private messageSigningPublicKey?: IcaConfiguredPublicKey;
+  private credentialSigningPublicKey?: IcaConfiguredPublicKey;
 
   constructor(config: IcaClientConfig) {
     this.config = config;
@@ -59,6 +66,7 @@ export class IcaClient {
 
     this.baseUrl = config.baseUrl || process.env.ICA_BASE_URL || 'http://localhost:3310';
     this.fetchFn = config.fetch ?? (typeof fetch !== 'undefined' ? fetch : undefined);
+    this.cryptoApi = config.crypto ?? (globalThis as typeof globalThis & { crypto?: IcaCrypto }).crypto;
     this.httpClient = config.httpClient ?? (config.fetch ? undefined : axios.create({ baseURL: this.baseUrl }));
 
     this.retryTimes = config.retryTimes ?? 3;
@@ -75,26 +83,151 @@ export class IcaClient {
     this.vpManager.setVpToken(vpToken);
   }
 
-  // Verify terms PDF for onboarding
-  async verifyTerms(pdfLinkOrBytes: string | Uint8Array): Promise<{ thid: string; location: string }> {
-    const message = new DidCommMessage();
-    message.type = 'https://globaldatacare.es/didcomm/ica/terms/verify-request/v1';
-    message.body = {};
+  setControllerMessageSigningPublicKey(alg: string, kid: string, jwk: IcaJwk): void {
+    this.messageSigningPublicKey = {
+      alg,
+      kid,
+      jwk: { ...jwk }
+    };
+  }
 
-    // Add attachment
+  clearControllerMessageSigningPublicKey(): void {
+    this.messageSigningPublicKey = undefined;
+  }
+
+  setOrgCredentialSigningPublicKey(alg: string, kid: string, jwk: IcaJwk): void {
+    this.credentialSigningPublicKey = {
+      alg,
+      kid,
+      jwk: { ...jwk }
+    };
+  }
+
+  clearOrgCredentialSigningPublicKey(): void {
+    this.credentialSigningPublicKey = undefined;
+  }
+
+  private createFapiMessage(
+    type: string,
+    body: Record<string, unknown> = {},
+    attachments: IcaDidCommAttachment[] = []
+  ): IcaDidCommRequest {
+    const message = prepareDidCommRequest(type, body, attachments as DidCommAttachment[]);
+    const jti = message.id;
+    const thid = message.thid || jti;
+
+    return {
+      jti,
+      thid,
+      type: message.type,
+      body: message.body,
+      attachments: message.attachments as IcaDidCommAttachment[] | undefined
+    };
+  }
+
+  private createAttachmentId(): string {
+    const uuidFactory = this.cryptoApi?.randomUUID;
+    if (typeof uuidFactory === 'function') {
+      return uuidFactory.call(this.cryptoApi);
+    }
+
+    const getRandomValues = this.cryptoApi?.getRandomValues?.bind(this.cryptoApi);
+    if (typeof getRandomValues === 'function') {
+      const bytes = new Uint8Array(16);
+      getRandomValues(bytes);
+      bytes[6] = (bytes[6] & 0x0f) | 0x40;
+      bytes[8] = (bytes[8] & 0x3f) | 0x80;
+      const hex = Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('');
+      return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+    }
+
+    throw new Error(
+      'Secure random UUID generation is not available in this runtime. ' +
+      'Provide IcaClientConfig.crypto or ensure globalThis.crypto is available.'
+    );
+  }
+
+  private buildConfiguredPublicJwk(configuredKey: IcaConfiguredPublicKey | undefined): IcaJwk | undefined {
+    if (!configuredKey) return undefined;
+    return {
+      ...configuredKey.jwk,
+      ...(configuredKey.alg ? { alg: configuredKey.alg } : {}),
+      ...(configuredKey.kid ? { kid: configuredKey.kid } : {})
+    };
+  }
+
+  private buildVerifyMessageMeta(explicitMeta?: IcaDidCommMessageMeta): IcaDidCommMessageMeta | undefined {
+    const configuredProtected = this.messageSigningPublicKey
+      ? {
+          alg: this.messageSigningPublicKey.alg,
+          kid: this.messageSigningPublicKey.kid,
+          jwk: { ...this.messageSigningPublicKey.jwk }
+        }
+      : undefined;
+
+    const explicitProtected = explicitMeta?.jws?.protected;
+    const protectedHeader = configuredProtected || explicitProtected
+      ? {
+          ...(configuredProtected || {}),
+          ...(explicitProtected || {})
+        }
+      : undefined;
+
+    if (!protectedHeader && !explicitMeta) return undefined;
+
+    return {
+      ...(explicitMeta || {}),
+      ...(protectedHeader ? {
+        jws: {
+          ...(explicitMeta?.jws || {}),
+          protected: protectedHeader
+        }
+      } : {})
+    };
+  }
+
+  // Verify terms PDF for onboarding
+  async verifyTerms(
+    pdfLinkOrBytes: string | Uint8Array,
+    options: VerifyTermsOptions = {}
+  ): Promise<{ thid: string; location: string }> {
+    const mediaType = options.mediaType || 'application/pdf';
+    const attachmentId = options.attachmentId || this.createAttachmentId();
+    let attachment: IcaDidCommAttachment;
     if (typeof pdfLinkOrBytes === 'string') {
-      message.attachments = [{
-        id: 'signed-terms',
-        media_type: 'application/pdf',
+      attachment = {
+        id: attachmentId,
+        media_type: mediaType,
         data: { links: [pdfLinkOrBytes] }
-      }];
+      };
     } else {
       const base64 = Buffer.from(pdfLinkOrBytes).toString('base64');
-      message.attachments = [{
-        id: 'signed-terms',
-        media_type: 'application/pdf',
+      attachment = {
+        id: attachmentId,
+        media_type: mediaType,
         data: { base64 }
-      }];
+      };
+    }
+
+    const organizationPublicKeyJwk = options.organizationPublicKeyJwk || this.buildConfiguredPublicJwk(this.credentialSigningPublicKey);
+    const attachments: IcaDidCommAttachment[] = [attachment];
+    if (organizationPublicKeyJwk) {
+      attachments.push({
+        id: `${attachmentId}-organization-public-jwk`,
+        media_type: 'application/jwk+json',
+        filename: 'organization-public-key.jwk.json',
+        data: { json: organizationPublicKeyJwk }
+      });
+    }
+
+    const message = this.createFapiMessage(
+      'https://globaldatacare.es/didcomm/ica/terms/verify-request/v1',
+      options.body || {},
+      attachments
+    );
+    const resolvedMeta = this.buildVerifyMessageMeta(options.meta);
+    if (resolvedMeta) {
+      message.meta = resolvedMeta as IcaDidCommMessageMeta;
     }
 
     const url = `/ica/cds-${this.jurisdiction}/v1/${this.config.sector}/terms/pdf/contract/_verify`;
@@ -107,7 +240,7 @@ export class IcaClient {
 
     if (response.status === 202) {
       const location = response.headers.location;
-      const thid = message.thid || message.id;
+      const thid = message.thid;
       return { thid, location };
     } else {
       throw new Error('Unexpected response status: ' + response.status);
@@ -332,39 +465,34 @@ export class IcaClient {
   async createOrgDidDocument(orgData: CreateOrgDidDocumentRequest): Promise<{ thid: string; location: string }> {
     const org = orgData.organization;
     const controller = orgData.controller;
+    const organizationPublicKeyJwk = org?.publicKeyJwk || this.buildConfiguredPublicJwk(this.credentialSigningPublicKey);
 
-    if (!org?.publicKeyJwk) {
-      throw new Error('organization.publicKeyJwk is required for DID creation');
-    }
-    if (!controller?.publicKeyJwk) {
-      throw new Error('controller.publicKeyJwk is required for DID creation');
-    }
-    if (!controller.sameAs) {
-      throw new Error('controller.sameAs is required for DID creation');
-    }
     const hasExplicitId = !!org.identifier;
     const hasDerived = !!org.url && !!org.taxID;
     if (!hasExplicitId && !hasDerived) {
       throw new Error('organization identifier (explicit mode) or organization url + taxID (derived mode) is required');
     }
 
-    const message = new DidCommMessage();
-    message.type = 'https://globaldatacare.es/didcomm/ica/entity/did/document/create-request/v1';
-    message.body = {
-      data: [
-        {
-          resource: {
-            organization: {
-              ...org
-            },
-            controller: {
-              sameAs: controller.sameAs,
-              publicKeyJwk: controller.publicKeyJwk
+    const message = this.createFapiMessage(
+      'https://globaldatacare.es/didcomm/ica/entity/did/document/create-request/v1',
+      {
+        data: [
+          {
+            resource: {
+              organization: {
+                ...org,
+                ...(organizationPublicKeyJwk ? { publicKeyJwk: organizationPublicKeyJwk } : {})
+              },
+              controller: {
+                ...(controller.sameAs ? { sameAs: controller.sameAs } : {}),
+                ...(controller.publicKeyJwk ? { publicKeyJwk: controller.publicKeyJwk } : {}),
+                ...(controller.jwks ? { jwks: controller.jwks } : {})
+              }
             }
           }
-        }
-      ]
-    };
+        ]
+      }
+    );
 
     const url = `/ica/cds-${this.jurisdiction}/v1/${this.config.sector}/entity/did/document/_create`;
     const response = await this.request({
@@ -376,7 +504,7 @@ export class IcaClient {
 
     if (response.status === 202) {
       const location = response.headers.location;
-      const thid = message.thid || message.id;
+      const thid = message.thid;
       return { thid, location };
     } else {
       throw new Error('Unexpected response status: ' + response.status);
@@ -389,18 +517,21 @@ export class IcaClient {
     organizationIdentifier?: string;
     organizationUrl?: string;
     organizationTaxID?: string;
-    organizationPublicKeyJwk: IcaJwk;
+    organizationPublicKeyJwk?: IcaJwk;
+    organizationJwks?: IcaJwks;
     controllerSameAs?: string;
     controllerPublicKeyJwk: IcaJwk;
+    controllerJwks?: IcaJwks;
   }): Promise<{ thid: string; location: string }> {
     const extracted = this.extractDidDocumentFieldsFromVcs(options.organizationVC, options.legalRepresentativeVC);
 
-    const organizationPublicKeyJwk = options.organizationPublicKeyJwk;
+    const organizationPublicKeyJwk = options.organizationPublicKeyJwk || this.buildConfiguredPublicJwk(this.credentialSigningPublicKey);
     const organizationIdentifier = options.organizationIdentifier || extracted.orgCredentialSubjectId;
     const controllerSameAs = options.controllerSameAs || extracted.controllerCredentialSubjectSameAs;
 
     const organization: CreateOrgDidDocumentRequest['organization'] = {
-      publicKeyJwk: organizationPublicKeyJwk
+      ...(organizationPublicKeyJwk ? { publicKeyJwk: organizationPublicKeyJwk } : {}),
+      ...(options.organizationJwks ? { jwks: options.organizationJwks } : {})
     };
     if (organizationIdentifier) {
       organization.identifier = organizationIdentifier;
@@ -409,8 +540,10 @@ export class IcaClient {
       organization.taxID = options.organizationTaxID || extracted.orgCredentialSubjectTaxID;
     }
 
-    if (!organization.publicKeyJwk || !options.controllerPublicKeyJwk || !controllerSameAs) {
-      throw new Error('Missing required DID document fields. Frontend must provide organization publicKeyJwk, controller publicKeyJwk, and controller sameAs.');
+    if (!controllerSameAs) {
+      throw new Error(
+        'Missing required DID document fields. Frontend must provide controller sameAs directly or via the legal representative VC.',
+      );
     }
 
     if (!organization.identifier && !(organization.url && organization.taxID)) {
@@ -421,7 +554,8 @@ export class IcaClient {
       organization,
       controller: {
         sameAs: controllerSameAs,
-        publicKeyJwk: options.controllerPublicKeyJwk
+        ...(options.controllerPublicKeyJwk ? { publicKeyJwk: options.controllerPublicKeyJwk } : {}),
+        ...(options.controllerJwks ? { jwks: options.controllerJwks } : {})
       }
     };
 
@@ -483,6 +617,25 @@ export class IcaClient {
 
   getOrganizationCredentialFromVerifyResponse(response: IcaVerifyTermsResponse): IcaOrganizationCredential | undefined {
     return this.getCredentialsFromVerifyResponse(response).organizationCredential;
+  }
+
+  getOrganizationKeyMaterialFromVerifyResponse(response: IcaVerifyTermsResponse): IcaVerifyResponseKeyMaterial {
+    const entry = this.getResponseEntries<IcaVerifyTermsResource>(response)
+      .find(candidate => this.isOrganizationCredentialEntry(candidate));
+    return {
+      publicKeyJwk: entry?.publicKeyJwk,
+      privateKeyJwk: entry?.privateKeyJwk,
+      keySource: entry?.keySource
+    };
+  }
+
+  getControllerKeyMaterialFromVerifyResponse(response: IcaVerifyTermsResponse): IcaVerifyResponseKeyMaterial {
+    const entry = this.getResponseEntries<IcaVerifyTermsResource>(response)
+      .find(candidate => this.isLegalRepresentativeCredentialEntry(candidate));
+    return {
+      publicKeyJwk: entry?.publicKeyJwk,
+      keySource: entry?.keySource
+    };
   }
 
   getLegalRepresentativeCredentialFromVerifyResponse(response: IcaVerifyTermsResponse): IcaLegalRepresentativeCredential | undefined {

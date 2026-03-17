@@ -3,6 +3,20 @@ export interface IcaJwk {
   [key: string]: unknown;
 }
 
+export interface IcaJwkWithPurposes extends IcaJwk {
+  purposes?: string[];
+}
+
+export interface IcaJwks {
+  keys: IcaJwkWithPurposes[];
+}
+
+export interface IcaConfiguredPublicKey {
+  alg?: string;
+  kid: string;
+  jwk: IcaJwk;
+}
+
 export interface IcaOperationOutcomeIssue {
   severity?: string;
   code?: string;
@@ -38,8 +52,66 @@ export interface IcaDidCommAttachment {
   [key: string]: unknown;
 }
 
+export interface IcaDidCommJwsProtectedMeta {
+  typ?: string;
+  cty?: string;
+  alg?: string;
+  kid?: string;
+  jwk?: IcaJwk;
+  [key: string]: unknown;
+}
+
+export interface IcaDidCommJweHeaderMeta {
+  typ?: string;
+  cty?: string;
+  enc?: string;
+  alg?: string;
+  kid?: string;
+  skid?: string;
+  jwk?: IcaJwk;
+  [key: string]: unknown;
+}
+
+export interface IcaDidCommMessageMeta {
+  jws?: {
+    protected?: IcaDidCommJwsProtectedMeta;
+    [key: string]: unknown;
+  };
+  jwe?: {
+    header?: IcaDidCommJweHeaderMeta;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
+export interface IcaDidCommRequest {
+  jti: string;
+  thid: string;
+  type: string;
+  body: Record<string, unknown>;
+  attachments?: IcaDidCommAttachment[];
+  meta?: IcaDidCommMessageMeta;
+  [key: string]: unknown;
+}
+
+export interface IcaCrypto {
+  randomUUID?: () => string;
+  getRandomValues?: (array: Uint8Array) => Uint8Array;
+}
+
+export interface VerifyTermsOptions {
+  mediaType?: string;
+  attachmentId?: string;
+  body?: Record<string, unknown>;
+  meta?: IcaDidCommMessageMeta;
+  organizationPublicKeyJwk?: IcaJwk;
+}
+
 export interface IcaBundleResponseEntry<TResource = unknown> {
   type?: string;
+  publicKeyJwk?: IcaJwk;
+  privateKeyJwk?: IcaJwk;
+  keySource?: 'attachment' | 'generated';
   response?: {
     status?: string;
     outcome?: IcaOperationOutcome;
@@ -151,12 +223,20 @@ export interface CreateOrgDidDocumentRequest {
     identifier?: string;
     url?: string;
     taxID?: string;
-    publicKeyJwk: IcaJwk;
+    publicKeyJwk?: IcaJwk;
+    jwks?: IcaJwks;
   };
   controller: {
     sameAs: string;
-    publicKeyJwk: IcaJwk;
+    publicKeyJwk?: IcaJwk;
+    jwks?: IcaJwks;
   };
+}
+
+export interface IcaVerifyResponseKeyMaterial {
+  publicKeyJwk?: IcaJwk;
+  privateKeyJwk?: IcaJwk;
+  keySource?: 'attachment' | 'generated';
 }
 
 export interface IcaDidDocumentVerificationMethod {
