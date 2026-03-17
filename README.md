@@ -98,7 +98,7 @@ const icaDidDoc = await client.getIcaDidDocument();
 // - the organization credential-signing key is sent as an extra JWK attachment
 //   during verifyTerms() if setOrgCredentialSigningPublicKey() is configured
 // - if no organization key is provided, ICA can autogenerate ES384 and return
-//   publicKeyJwk/privateKeyJwk in verify-response
+//   publicKeyJwk/privateKeyJwk in _verify-response
 // - if _verify already stored a controller binding, _create must reuse it;
 //   an explicit controller.publicKeyJwk can only be sent if it matches
 // - if _verify already stored an organization key, _create cannot override it;
@@ -161,19 +161,8 @@ await client.verifyTerms(pdfBytesOrLink, {
   mediaType: 'application/pdf'
 });
 
-// You can still override the message meta explicitly when needed.
-await client.verifyTerms(pdfBytesOrLink, {
-  mediaType: 'application/pdf',
-  meta: {
-    jws: {
-      protected: {
-        alg: 'ES384',
-        kid: 'org-msg-es384-override',
-        jwk: { kty: 'EC', crv: 'P-384', x: '<x>', y: '<y>' }
-      }
-    }
-  }
-});
+// For normal integrations, do not build meta.jws.protected.jwk manually.
+// Use setControllerMessageSigningPublicKey() and let the SDK populate it.
 
 // Prepare DIDComm message
 const message = client.prepareDidCommRequest('type', body, attachments);
