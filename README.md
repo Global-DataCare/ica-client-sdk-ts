@@ -99,8 +99,12 @@ const icaDidDoc = await client.getIcaDidDocument();
 //   during verifyTerms() if setOrgCredentialSigningPublicKey() is configured
 // - if no organization key is provided, ICA can autogenerate ES384 and return
 //   publicKeyJwk/privateKeyJwk in verify-response
-// - _create can later override the organization key by sending another
-//   organization.publicKeyJwk explicitly
+// - if _verify already stored a controller binding, _create must reuse it;
+//   an explicit controller.publicKeyJwk can only be sent if it matches
+// - if _verify already stored an organization key, _create cannot override it;
+//   an explicit organization.publicKeyJwk can only be sent if it matches
+// - if the organization key was ICA-generated in _verify (keySource=generated),
+//   _create must send organization.publicKeyJwk again as explicit confirmation
 
 const { thid: createThid } = await client.createOrgDidDocument({
   organization: {
@@ -189,8 +193,11 @@ client.includeFileInMessage(message, fileBytes, 'application/pdf', 'file-id');
 Recommended SDK usage:
 
 - `setControllerMessageSigningPublicKey(alg, kid, jwk)` for controller onboarding/message binding
-- `setOrgCredentialSigningPublicKey(alg, kid, jwk)` to send the organization public JWK attachment in `_verify`, and also as `_create` fallback when you want explicit override
-- explicit request payload values still override SDK defaults
+- `setOrgCredentialSigningPublicKey(alg, kid, jwk)` to send the organization public JWK attachment in `_verify`
+- in `_create`, explicit `controller.publicKeyJwk` and `organization.publicKeyJwk` are still valid for v1 compatibility when no stored binding/bootstrap key exists yet
+- if `_verify` already stored the controller binding, an explicit `controller.publicKeyJwk` in `_create` must match it exactly
+- if `_verify` already stored the organization key, an explicit `organization.publicKeyJwk` in `_create` must match it exactly
+- if `_verify` returned `keySource: "generated"`, pass back `organizationKeyMaterial.publicKeyJwk` to `_create` as confirmation before publishing the DID document
 
 ## Planned V2 Binding
 
@@ -208,6 +215,9 @@ Important security rule:
 - the initial onboarding transaction can bind the first organization key,
 - reusing the same contract to bind a different key must be rejected,
 - post-onboarding key addition or rotation must use a dedicated key-management endpoint, not `_verify`.
+- if `_verify` already bound a controller key, `_create` cannot replace it.
+- if `_verify` already stored an organization key, `_create` cannot replace it.
+- if ICA generated the organization keypair in `_verify`, the caller must keep it and confirm the same `publicKeyJwk` in `_create`.
 
 Today, the SDK can already transport both:
 
