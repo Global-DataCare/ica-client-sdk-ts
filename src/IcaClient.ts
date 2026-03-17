@@ -629,13 +629,10 @@ export class IcaClient {
     };
   }
 
-  getControllerKeyMaterialFromVerifyResponse(response: IcaVerifyTermsResponse): IcaVerifyResponseKeyMaterial {
+  getControllerBindingPublicKeyFromVerifyResponse(response: IcaVerifyTermsResponse): IcaJwk | undefined {
     const entry = this.getResponseEntries<IcaVerifyTermsResource>(response)
       .find(candidate => this.isLegalRepresentativeCredentialEntry(candidate));
-    return {
-      publicKeyJwk: entry?.publicKeyJwk,
-      keySource: entry?.keySource
-    };
+    return entry?.publicKeyJwk;
   }
 
   getLegalRepresentativeCredentialFromVerifyResponse(response: IcaVerifyTermsResponse): IcaLegalRepresentativeCredential | undefined {

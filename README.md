@@ -69,7 +69,7 @@ const verifyResponse = await client.pollVerifyTermsResponse(thid);
 // - organization public/private JWK live outside resource on the organization entry
 // - controller public JWK lives outside resource on the legal representative entry
 const organizationKeyMaterial = client.getOrganizationKeyMaterialFromVerifyResponse(verifyResponse);
-const controllerKeyMaterial = client.getControllerKeyMaterialFromVerifyResponse(verifyResponse);
+const controllerBindingPublicKey = client.getControllerBindingPublicKeyFromVerifyResponse(verifyResponse);
 
 // Get VC JWT attachments from the DIDComm response
 const { organizationVC, legalRepresentativeVC, allVcs } = client.getVcsFromResponse(verifyResponse);
@@ -122,7 +122,7 @@ const { thid: createThid } = await client.createOrgDidDocument({
   },
   controller: {
     sameAs: 'urn:multibase:zControllerHash',
-    publicKeyJwk: controllerKeyMaterial.publicKeyJwk,
+    publicKeyJwk: controllerBindingPublicKey,
     jwks: {
       keys: [
         {
@@ -146,7 +146,7 @@ const { thid: derivedThid } = await client.createOrgDidDocumentFromVcs({
   organizationVC: organizationCredential,
   legalRepresentativeVC: legalRepresentativeCredential,
   organizationPublicKeyJwk: organizationKeyMaterial.publicKeyJwk,
-  controllerPublicKeyJwk: controllerKeyMaterial.publicKeyJwk
+  controllerPublicKeyJwk: controllerBindingPublicKey
 });
 const derivedCreateResponse = await client.pollCreateOrgDidDocumentResponse(derivedThid);
 

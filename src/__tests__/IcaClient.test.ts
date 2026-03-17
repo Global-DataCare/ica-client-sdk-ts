@@ -558,10 +558,9 @@ describe('IcaClient', () => {
       privateKeyJwk: expect.objectContaining({ d: 'org-priv-d' }),
       keySource: 'generated'
     });
-    expect(client.getControllerKeyMaterialFromVerifyResponse(response)).toEqual({
-      publicKeyJwk: expect.objectContaining({ kid: 'controller-es384-001' }),
-      keySource: undefined
-    });
+    expect(client.getControllerBindingPublicKeyFromVerifyResponse(response)).toEqual(
+      expect.objectContaining({ kid: 'controller-es384-001' })
+    );
   });
 });
 
