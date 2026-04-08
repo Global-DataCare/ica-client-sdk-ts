@@ -28,6 +28,11 @@ The SDK now exposes high-level methods for the ICA backend auth lifecycle:
 - api key lifecycle: `/api-key/org.schema/action/_create|_disable|_remove|_search`
 - identity auth: `/identity/auth/_dcr|_code|_token|_exchange`
 
+Critical clarification:
+- `_dcr` here is backend technical identity binding (`client_id` + backend public JWK in `meta.jws.protected.jwk`).
+- It is not the human wallet VP/Clearing House flow.
+- Human/controller authentication and organization trust checks happen before backend API key issuance, not inside `_dcr`.
+
 Reference for exact sequence and contracts:
 - `dataspace-ica-ts/docs/backend-auth-migration.md`
 - `dataspace-ica-ts/src/api/openapi.ts`

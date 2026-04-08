@@ -7,8 +7,7 @@ This SDK allows frontend developers using React or React Native to interact with
 - [Installation](#installation)
 - [Configuration](#configuration)
   - [How `baseUrl` is resolved](#how-baseurl-is-resolved)
-  - [Frontend environment variables (React/Vite/Next)](#frontend-environment-variables-reactvitenext)
-  - [Quick start by stack](#quick-start-by-stack)
+  - [React (Vite) environment](#react-vite-environment)
 - [Usage](#usage)
 - [Current Rules](#current-rules)
 - [V2 Binding](#v2-binding)
@@ -37,27 +36,15 @@ The SDK resolves ICA URL in this order:
 
 For browser apps, the recommended and most reliable approach is to always pass `baseUrl` explicitly in the `IcaClient` constructor.
 
-### Frontend environment variables (React/Vite/Next)
+### React (Vite) environment
 
-In frontend bundles, environment variables are exposed by the app bundler/runtime, not by the SDK itself. Use your framework convention and then pass that value to `baseUrl`.
-
-- Vite: `import.meta.env.VITE_ICA_BASE_URL`
-- Create React App: `process.env.REACT_APP_ICA_BASE_URL`
-- Next.js (client-side): `process.env.NEXT_PUBLIC_ICA_BASE_URL`
-
-`ICA_BASE_URL` from `.env.example` is still useful for Node/test environments or setups where `process.env` is injected at runtime/build time.
-
-### Quick start by stack
-
-#### Vite (recommended for React)
-
-Define in your app `.env`:
+Use a single environment variable in your React app:
 
 ```bash
 VITE_ICA_BASE_URL=http://localhost:3310
 ```
 
-Initialize:
+Initialize the SDK with that value:
 
 ```ts
 const client = new IcaClient({
@@ -69,47 +56,9 @@ const client = new IcaClient({
 });
 ```
 
-#### Create React App
+`ICA_BASE_URL` from `.env.example` remains useful for Node/testing scenarios.
 
-Define in your app `.env`:
-
-```bash
-REACT_APP_ICA_BASE_URL=http://localhost:3310
-```
-
-Initialize:
-
-```ts
-const client = new IcaClient({
-  sector: Sector.HealthCare,
-  didWeb: 'did:web:ica',
-  baseUrl: process.env.REACT_APP_ICA_BASE_URL,
-  organizationVcs: [],
-  crypto: globalThis.crypto
-});
-```
-
-#### Next.js (client)
-
-Define in your app `.env.local`:
-
-```bash
-NEXT_PUBLIC_ICA_BASE_URL=http://localhost:3310
-```
-
-Initialize:
-
-```ts
-const client = new IcaClient({
-  sector: Sector.HealthCare,
-  didWeb: 'did:web:ica',
-  baseUrl: process.env.NEXT_PUBLIC_ICA_BASE_URL,
-  organizationVcs: [],
-  crypto: globalThis.crypto
-});
-```
-
-#### SDK local default (Node/test/reference)
+### SDK local default (Node/test/reference)
 
 The repository includes:
 
@@ -499,7 +448,7 @@ If you want to depend on the common base module directly, import them from `gdc-
 
 ## Backend Auth (Node/Backend)
 
-This SDK now includes ICA backend auth lifecycle helpers for the custom async profile (`identity-exchange.v1`):
+This SDK includes ICA backend-auth helpers for the custom async profile `identity-exchange.v1`:
 
 - `controllerExchange(...)` + `pollControllerExchangeResponse(...)`
 - `createApiKey(...)`, `disableApiKey(...)`, `removeApiKey(...)`, `searchApiKeys(...)`
@@ -512,8 +461,9 @@ This SDK now includes ICA backend auth lifecycle helpers for the custom async pr
 
 Notes:
 
-- This is the ICA custom backend flow (`/_dcr -> /_code -> /_token -> /_exchange`) with async submit/poll operations.
-- SMART Backend Services (`client_credentials + private_key_jwt`) is a different profile and is not the same flow.
+- `identity-exchange.v1` is ICA custom flow: `/_dcr -> /_code -> /_token -> /_exchange` (all async submit/poll).
+- SMART Backend Services (`client_credentials + private_key_jwt`) is a separate OAuth profile.
+- `_dcr` in this section is backend technical identity binding (`client_id` + technical JWK). It is not the human controller VP/Clearing House flow.
 
 Minimal identity flow example:
 
@@ -538,3 +488,17 @@ const codeSubmit = await client.identityCode({
 }, { bearerToken: '<controller-access-token>' });
 const codeResponse = await client.pollIdentityCodeResponse(codeSubmit.thid, '<controller-access-token>');
 ```
+
+### Backend Onboarding Variants
+
+For security audits, keep these two variants explicit:
+
+1. Controller-led provisioning:
+- A human controller authenticates in ICA and creates backend API keys (`/_create`).
+- The backend receives the API key out-of-band and runs DCR (`/_dcr`) with its own technical public key.
+
+2. Backend-led binding (same API contract):
+- The controller still authorizes API key issuance, but the backend performs DCR itself through the SDK.
+- No human VP token is required inside `_dcr`; `_dcr` is technical key binding for backend identity.
+
+After DCR is bound, runtime token issuance uses `_code -> _token -> _exchange` (or SMART standard if the server supports that profile).
