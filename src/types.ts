@@ -99,9 +99,22 @@ export interface IcaCrypto {
   getRandomValues?: (array: Uint8Array) => Uint8Array;
 }
 
+export interface VerifyTermsOrganizationPayload {
+  legalName?: string;
+  taxID?: string;
+}
+
+export interface VerifyTermsLegalRepresentativePayload {
+  givenName?: string;
+  familyName?: string;
+  identifier?: string;
+}
+
 export interface VerifyTermsOptions {
   mediaType?: string;
   attachmentId?: string;
+  organizationPayload?: VerifyTermsOrganizationPayload;
+  legalRepresentativePayload?: VerifyTermsLegalRepresentativePayload;
   body?: Record<string, unknown>;
   meta?: IcaDidCommMessageMeta;
   organizationPublicKeyJwk?: IcaJwk;
@@ -227,10 +240,21 @@ export interface CreateOrgDidDocumentRequest {
     jwks?: IcaJwks;
   };
   controller: {
-    sameAs: string;
+    sameAs?: string;
     publicKeyJwk?: IcaJwk;
     jwks?: IcaJwks;
   };
+}
+
+export interface RemoveOrganizationTermsRequest {
+  organization: {
+    identifier?: string;
+    taxID?: string;
+  };
+  controller?: {
+    sameAs?: string;
+  };
+  reason?: string;
 }
 
 export interface IcaVerifyResponseKeyMaterial {
@@ -264,3 +288,98 @@ export interface IcaCreateOrgDidDocumentResource {
 }
 
 export type IcaCreateOrgDidDocumentResponse = IcaDidCommResponse<IcaCreateOrgDidDocumentResource>;
+
+export interface IcaRemoveOrganizationTermsResource {
+  id?: string;
+  status?: string;
+  organizationTaxId?: string;
+  did?: string;
+  removedAt?: string;
+  reason?: string;
+  effects?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export type IcaRemoveOrganizationTermsResponse = IcaDidCommResponse<IcaRemoveOrganizationTermsResource>;
+
+export interface BackendAuthRequestOptions {
+  bearerToken: string;
+  meta?: IcaDidCommMessageMeta;
+  thid?: string;
+}
+
+export interface ControllerExchangeRequestBody {
+  [key: string]: unknown;
+}
+
+export interface ApiKeyCreateAction {
+  agent: {
+    email: string;
+  };
+  scope: string[];
+  target?: string;
+  instrument?: Record<string, unknown>;
+  expires_in_seconds?: number;
+}
+
+export interface ApiKeySelector {
+  identifier?: string;
+  agent?: {
+    sameAs?: string;
+    email?: string;
+  };
+}
+
+export interface ApiKeyActionRequest {
+  thid?: string;
+  data?: Array<{
+    resource: ApiKeyCreateAction | ApiKeySelector;
+  }>;
+  [key: string]: unknown;
+}
+
+export interface IdentityDcrBody {
+  [key: string]: unknown;
+}
+
+export interface IdentityCodeBody {
+  client_id: string;
+  code_challenge: string;
+  code_challenge_method?: 'S256' | 'plain' | string;
+  [key: string]: unknown;
+}
+
+export interface IdentityTokenBody {
+  client_id: string;
+  code: string;
+  code_verifier: string;
+  [key: string]: unknown;
+}
+
+export interface IdentityExchangeBody {
+  client_id: string;
+  subject_token: string;
+  subject_token_type?: string;
+  [key: string]: unknown;
+}
+
+export type IcaBackendAuthResponse = IcaDidCommResponse<Record<string, unknown>>;
+
+export interface RunBackendAuthFlowRequest {
+  bearerToken: string;
+  clientId: string;
+  codeVerifier: string;
+  codeChallenge?: string;
+  codeChallengeMethod?: 'S256' | 'plain' | string;
+  subjectTokenType?: string;
+  dcrBody?: IdentityDcrBody;
+  meta?: IcaDidCommMessageMeta;
+}
+
+export interface RunBackendAuthFlowResult {
+  codeChallenge: string;
+  dcr: IcaBackendAuthResponse;
+  code: IcaBackendAuthResponse;
+  token: IcaBackendAuthResponse;
+  exchange: IcaBackendAuthResponse;
+}

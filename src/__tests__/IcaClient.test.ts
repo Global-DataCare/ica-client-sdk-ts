@@ -433,6 +433,38 @@ describe('IcaClient', () => {
     expect(requestPayload?.id).toBeUndefined();
   });
 
+  it('should create org DID document from VCs even when controller sameAs is absent', async () => {
+    const verifyResponse = createVerifyResponseExample();
+    const orgVc = verifyResponse.body?.data?.[0]?.resource;
+    const repVc = {
+      ...(verifyResponse.body?.data?.[1]?.resource as Record<string, unknown>),
+      credentialSubject: {
+        ...((verifyResponse.body?.data?.[1]?.resource as any)?.credentialSubject || {}),
+        sameAs: undefined
+      }
+    };
+
+    mockedAxios.request
+      ?.mockResolvedValueOnce({ status: 202, headers: { location: '/dummy', 'retry-after': '1' } });
+
+    const result = await client.createOrgDidDocumentFromVcs({
+      organizationVC: orgVc,
+      legalRepresentativeVC: repVc,
+      organizationPublicKeyJwk: { kty: 'EC', crv: 'P-384', x: 'org-x', y: 'org-y' },
+      controllerPublicKeyJwk: { kty: 'EC', crv: 'P-384', x: 'rep-x', y: 'rep-y' }
+    });
+
+    expect(result.location).toBe('/dummy');
+    const requestPayload: any = mockedAxios.request.mock.calls[0]?.[0]?.data;
+    expect(requestPayload?.body?.data?.[0]?.resource?.controller?.sameAs).toBeUndefined();
+    expect(requestPayload?.body?.data?.[0]?.resource?.controller?.publicKeyJwk).toEqual({
+      kty: 'EC',
+      crv: 'P-384',
+      x: 'rep-x',
+      y: 'rep-y'
+    });
+  });
+
   it('should include optional jwks in DID document creation payload', async () => {
     mockedAxios.request
       ?.mockResolvedValueOnce({ status: 202, headers: { location: '/dummy', 'retry-after': '1' } });
@@ -530,11 +562,165 @@ describe('IcaClient', () => {
     });
   });
 
+  it('should remove organization terms using the configured controller message-signing key', async () => {
+    mockedAxios.request?.mockResolvedValueOnce({
+      status: 202,
+      headers: { location: '/remove-response', 'retry-after': '1' }
+    });
+
+    client.setControllerMessageSigningPublicKey('ES384', 'controller-msg-es384-001', {
+      kty: 'EC',
+      crv: 'P-384',
+      x: 'msg-x',
+      y: 'msg-y'
+    });
+
+    const result = await client.removeOrganizationTerms({
+      organization: {
+        identifier: 'did:web:globaldatacare.es:animal-care:organization:taxid:VATES-B00000000',
+        taxID: 'VATES-B00000000'
+      },
+      reason: 'organization-requested-removal'
+    });
+
+    expect(result.location).toBe('/remove-response');
+    const requestPayload: any = mockedAxios.request.mock.calls[0]?.[0]?.data;
+    expect(requestPayload?.meta?.jws?.protected).toEqual({
+      alg: 'ES384',
+      kid: 'controller-msg-es384-001',
+      jwk: {
+        kty: 'EC',
+        crv: 'P-384',
+        x: 'msg-x',
+        y: 'msg-y'
+      }
+    });
+    expect(requestPayload?.body?.data?.[0]?.resource).toEqual({
+      organization: {
+        identifier: 'did:web:globaldatacare.es:animal-care:organization:taxid:VATES-B00000000',
+        taxID: 'VATES-B00000000'
+      },
+      controller: {},
+      reason: 'organization-requested-removal'
+    });
+  });
+
+  it('should poll organization terms removal response with retries', async () => {
+    mockedAxios.request
+      ?.mockResolvedValueOnce({ status: 202, headers: { 'retry-after': '0' } })
+      .mockResolvedValueOnce({ status: 200, data: { body: { total: 1, data: [{ type: 'TermsRemove-v1.0' }] } } });
+
+    const response = await client.pollRemoveOrganizationTermsResponse('remove-thid');
+    expect(response).toEqual({ body: { total: 1, data: [{ type: 'TermsRemove-v1.0' }] } });
+  });
+
+  it('should submit and poll controller exchange with bearer token', async () => {
+    mockedAxios.request
+      ?.mockResolvedValueOnce({ status: 202, headers: { location: '/exchange-response', 'retry-after': '1' } })
+      .mockResolvedValueOnce({ status: 200, data: { body: { data: [{ resource: { status: 'ok' } }] } }, headers: {} });
+
+    const submit = await client.controllerExchange(
+      {},
+      { bearerToken: 'controller-token' }
+    );
+    const response = await client.pollControllerExchangeResponse(submit.thid, 'controller-token');
+
+    expect(submit.location).toBe('/exchange-response');
+    expect(response?.body?.data?.[0]?.resource).toEqual({ status: 'ok' });
+    const submitCall = mockedAxios.request.mock.calls[0]?.[0];
+    expect(submitCall?.headers?.Authorization).toBe('Bearer controller-token');
+    expect(submitCall?.url).toContain('/organization/dataspace/auth/_exchange');
+  });
+
+  it('should submit API key create and poll API key action response by action', async () => {
+    mockedAxios.request
+      ?.mockResolvedValueOnce({ status: 202, headers: { location: '/create-response', 'retry-after': '1' } })
+      .mockResolvedValueOnce({ status: 200, data: { body: { data: [{ resource: { identifier: 'api-key-1' } }] } }, headers: {} });
+
+    const submit = await client.createApiKey({
+      data: [
+        {
+          resource: {
+            agent: { email: 'backend@example.org' },
+            scope: ['ica.backend.read']
+          }
+        }
+      ]
+    }, 'controller-token');
+
+    const response = await client.pollApiKeyActionResponse(submit.thid, 'controller-token', '_create');
+    expect(submit.location).toBe('/create-response');
+    expect(response?.body?.data?.[0]?.resource).toEqual({ identifier: 'api-key-1' });
+    const submitCall = mockedAxios.request.mock.calls[0]?.[0];
+    expect(submitCall?.headers?.Authorization).toBe('Bearer controller-token');
+    expect(submitCall?.headers?.['Content-Type']).toBe('application/json');
+  });
+
+  it('should submit identity DCR with meta.jws and top-level client_id', async () => {
+    mockedAxios.request?.mockResolvedValueOnce({
+      status: 202,
+      headers: { location: '/dcr-response', 'retry-after': '1' }
+    });
+
+    const submit = await client.identityDcr(
+      'api-key-value-001',
+      {},
+      {
+        bearerToken: 'controller-token',
+        meta: {
+          jws: {
+            protected: {
+              alg: 'ES384',
+              kid: 'controller-es384-001',
+              jwk: { kty: 'EC', crv: 'P-384', x: 'x', y: 'y' }
+            }
+          }
+        }
+      }
+    );
+
+    expect(submit.location).toBe('/dcr-response');
+    const submitPayload: any = mockedAxios.request.mock.calls[0]?.[0]?.data;
+    expect(submitPayload?.client_id).toBe('api-key-value-001');
+    expect(submitPayload?.meta?.jws?.protected?.kid).toBe('controller-es384-001');
+  });
+
+  it('should run backend auth flow helper end-to-end', async () => {
+    mockedAxios.request
+      ?.mockResolvedValueOnce({ status: 202, headers: { location: '/dcr-response', 'retry-after': '1' } })
+      .mockResolvedValueOnce({ status: 200, data: { body: { data: [{ resource: { status: 'bound' } }] } }, headers: {} })
+      .mockResolvedValueOnce({ status: 202, headers: { location: '/code-response', 'retry-after': '1' } })
+      .mockResolvedValueOnce({ status: 200, data: { body: { data: [{ resource: { code: 'code-123' } }] } }, headers: {} })
+      .mockResolvedValueOnce({ status: 202, headers: { location: '/token-response', 'retry-after': '1' } })
+      .mockResolvedValueOnce({ status: 200, data: { body: { data: [{ resource: { id_token: 'id-token-xyz' } }] } }, headers: {} })
+      .mockResolvedValueOnce({ status: 202, headers: { location: '/exchange-response', 'retry-after': '1' } })
+      .mockResolvedValueOnce({ status: 200, data: { body: { data: [{ resource: { access_token: 'access-token-abc' } }] } }, headers: {} });
+
+    const result = await client.runBackendAuthFlow({
+      bearerToken: 'controller-token',
+      clientId: 'api-key-value-001',
+      codeVerifier: 'code-verifier-123',
+      codeChallenge: 'code-challenge-123',
+      meta: {
+        jws: {
+          protected: {
+            alg: 'ES384',
+            jwk: { kty: 'EC', crv: 'P-384', x: 'x', y: 'y' }
+          }
+        }
+      }
+    });
+
+    expect(result.codeChallenge).toBe('code-challenge-123');
+    expect(result.exchange?.body?.data?.[0]?.resource).toEqual({ access_token: 'access-token-abc' });
+    expect(mockedAxios.request).toHaveBeenCalledTimes(8);
+  });
+
   it('should throw if required did document fields missing', async () => {
     await expect(client.createOrgDidDocumentFromVcs({
       controllerPublicKeyJwk: { kty: 'EC' }
     }))
-      .rejects.toThrow('Missing required DID document fields');
+      .rejects.toThrow('Missing required organization identifier (did) or organization url+taxID.');
   });
 
   it('should extract credentials, subjects, and VC JWTs from verify response', () => {
@@ -667,6 +853,59 @@ describe('IcaClient with fetch', () => {
     expect(requestPayload?.jti).toEqual(expect.any(String));
     expect(requestPayload?.thid).toBe(requestPayload?.jti);
     expect(requestPayload?.id).toBeUndefined();
+  });
+
+  it('should remove organization terms using fetch', async () => {
+    const mockResponse = createMockResponse(202, new Headers({ location: '/remove-response', 'retry-after': '1' }), {});
+    (global.fetch as jest.MockedFunction<typeof fetch>).mockResolvedValue(mockResponse);
+
+    client.setControllerMessageSigningPublicKey('ES384', 'controller-msg-es384-001', {
+      kty: 'EC',
+      crv: 'P-384',
+      x: 'msg-x',
+      y: 'msg-y'
+    });
+
+    const result = await client.removeOrganizationTerms({
+      organization: {
+        identifier: 'did:web:globaldatacare.es:animal-care:organization:taxid:VATES-B00000000'
+      }
+    });
+
+    expect(result.location).toBe('/remove-response');
+    const rawBody = (global.fetch as jest.MockedFunction<typeof fetch>).mock.calls[0]?.[1]?.body;
+    const requestPayload: any = typeof rawBody === 'string' ? JSON.parse(rawBody) : undefined;
+    expect(requestPayload?.meta?.jws?.protected?.kid).toBe('controller-msg-es384-001');
+  });
+
+  it('should submit identity exchange using fetch transport', async () => {
+    const mockResponse = createMockResponse(202, new Headers({ location: '/identity-exchange-response', 'retry-after': '1' }), {});
+    (global.fetch as jest.MockedFunction<typeof fetch>).mockResolvedValue(mockResponse);
+
+    const submit = await client.identityExchange(
+      {
+        client_id: 'api-key-value-001',
+        subject_token: 'id-token-xyz'
+      },
+      { bearerToken: 'controller-token' }
+    );
+
+    expect(submit.location).toBe('/identity-exchange-response');
+    const fetchCall = (global.fetch as jest.MockedFunction<typeof fetch>).mock.calls[0];
+    expect(fetchCall?.[1]?.headers).toEqual(expect.objectContaining({
+      Authorization: 'Bearer controller-token'
+    }));
+  });
+
+  it('should poll organization terms removal response using fetch', async () => {
+    const mockResponse202 = createMockResponse(202, new Headers({ 'retry-after': '0' }), {});
+    const mockResponse200 = createMockResponse(200, new Headers({ 'content-type': 'application/didcomm-plain+json' }), { body: { total: 1 } });
+    (global.fetch as jest.MockedFunction<typeof fetch>)
+      .mockResolvedValueOnce(mockResponse202)
+      .mockResolvedValueOnce(mockResponse200);
+
+    const response = await client.pollRemoveOrganizationTermsResponse('remove-thid');
+    expect(response).toEqual({ body: { total: 1 } });
   });
 
   it('should poll create org DID document response using fetch', async () => {

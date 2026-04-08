@@ -2,6 +2,23 @@
 
 This SDK allows frontend developers using React or React Native to interact with `dataspace-ica-ts` services for PDF verification, VC/VP management, DIDComm messaging, and organization `did:web` document creation.
 
+## Index
+
+- [Installation](#installation)
+- [Configuration](#configuration)
+  - [How `baseUrl` is resolved](#how-baseurl-is-resolved)
+  - [Frontend environment variables (React/Vite/Next)](#frontend-environment-variables-reactvitenext)
+  - [Quick start by stack](#quick-start-by-stack)
+- [Usage](#usage)
+- [Current Rules](#current-rules)
+- [V2 Binding](#v2-binding)
+- [Organization Offboarding](#organization-offboarding)
+- [Verify Response Shape](#verify-response-shape)
+- [Features](#features)
+- [Testing](#testing)
+- [Shared Utilities](#shared-utilities)
+- [Backend Auth (Node/Backend)](#backend-auth-nodebackend)
+
 ## Installation
 
 ```bash
@@ -10,11 +27,97 @@ npm install ica-client-sdk-ts
 
 ## Configuration
 
-Set environment variables:
+### How `baseUrl` is resolved
+
+The SDK resolves ICA URL in this order:
+
+1. `new IcaClient({ baseUrl: ... })`
+2. `process.env.ICA_BASE_URL`
+3. `http://localhost:3310`
+
+For browser apps, the recommended and most reliable approach is to always pass `baseUrl` explicitly in the `IcaClient` constructor.
+
+### Frontend environment variables (React/Vite/Next)
+
+In frontend bundles, environment variables are exposed by the app bundler/runtime, not by the SDK itself. Use your framework convention and then pass that value to `baseUrl`.
+
+- Vite: `import.meta.env.VITE_ICA_BASE_URL`
+- Create React App: `process.env.REACT_APP_ICA_BASE_URL`
+- Next.js (client-side): `process.env.NEXT_PUBLIC_ICA_BASE_URL`
+
+`ICA_BASE_URL` from `.env.example` is still useful for Node/test environments or setups where `process.env` is injected at runtime/build time.
+
+### Quick start by stack
+
+#### Vite (recommended for React)
+
+Define in your app `.env`:
+
+```bash
+VITE_ICA_BASE_URL=http://localhost:3310
+```
+
+Initialize:
+
+```ts
+const client = new IcaClient({
+  sector: Sector.HealthCare,
+  didWeb: 'did:web:ica',
+  baseUrl: import.meta.env.VITE_ICA_BASE_URL,
+  organizationVcs: [],
+  crypto: globalThis.crypto
+});
+```
+
+#### Create React App
+
+Define in your app `.env`:
+
+```bash
+REACT_APP_ICA_BASE_URL=http://localhost:3310
+```
+
+Initialize:
+
+```ts
+const client = new IcaClient({
+  sector: Sector.HealthCare,
+  didWeb: 'did:web:ica',
+  baseUrl: process.env.REACT_APP_ICA_BASE_URL,
+  organizationVcs: [],
+  crypto: globalThis.crypto
+});
+```
+
+#### Next.js (client)
+
+Define in your app `.env.local`:
+
+```bash
+NEXT_PUBLIC_ICA_BASE_URL=http://localhost:3310
+```
+
+Initialize:
+
+```ts
+const client = new IcaClient({
+  sector: Sector.HealthCare,
+  didWeb: 'did:web:ica',
+  baseUrl: process.env.NEXT_PUBLIC_ICA_BASE_URL,
+  organizationVcs: [],
+  crypto: globalThis.crypto
+});
+```
+
+#### SDK local default (Node/test/reference)
+
+The repository includes:
 
 ```bash
 ICA_BASE_URL=http://localhost:3310
 ```
+
+This variable is used only if you do not provide `baseUrl` explicitly.
 
 If your runtime does not expose `globalThis.crypto`, inject a compatible
 implementation through `IcaClientConfig.crypto`. The SDK uses it only for
@@ -28,6 +131,7 @@ import { IcaClient, Sector } from 'ica-client-sdk-ts';
 const client = new IcaClient({
   sector: Sector.HealthCare,
   didWeb: 'did:web:ica',
+  baseUrl: import.meta.env.VITE_ICA_BASE_URL,
   organizationVcs: [], // If registered
   crypto: globalThis.crypto
 });
@@ -188,9 +292,9 @@ Recommended SDK usage:
 - if `_verify` already stored the organization key, an explicit `organization.publicKeyJwk` in `_create` must match it exactly
 - if `_verify` returned `keySource: "generated"`, pass back `organizationKeyMaterial.publicKeyJwk` to `_create` as confirmation before publishing the DID document
 
-## Planned V2 Binding
+## V2 Binding
 
-The planned v2 onboarding flow binds the controller message-signing key during `_verify` using `meta.jws.protected.jwk`.
+The v2 onboarding flow binds the controller message-signing key during `_verify` using `meta.jws.protected.jwk`.
 
 That key is for onboarding/message authorization. It is not automatically the same key that will sign VCs for SMART-on-FHIR, EUDI Wallet, or Pontus-X.
 
@@ -212,6 +316,96 @@ Today, the SDK can already transport both:
 
 - `meta.jws.protected.jwk` for the controller key
 - the organization public JWK attachment for the organization credential key
+
+## Organization Offboarding
+
+Organization offboarding should not use the current network credential `_revoke` endpoint.
+
+For organization lifecycle, the intended business endpoint is:
+
+```text
+POST /ica/cds-{jurisdiction}/v1/{sector}/terms/pdf/{resourceType}/_remove
+POST /ica/cds-{jurisdiction}/v1/{sector}/terms/pdf/{resourceType}/_remove-response
+```
+
+Intended semantics:
+
+- the organization no longer accepts those terms
+- the organization is removed from the active catalog
+- the organization DID document is removed from active publication
+- organization keys are revoked/deactivated
+- a later return requires a full new onboarding cycle (`_verify` -> `_create`)
+
+Authorization model:
+
+- didactic mode: controller key may still travel as `meta.jws.protected.jwk`
+- hardened mode: request should be real `didcomm-signed`, optionally wrapped in `didcomm-encrypted`
+
+Important:
+
+- this is different from `network/credentials/{credentialType}/_revoke`
+- `network ... _revoke` is for credential lifecycle
+- `terms ... _remove` is for organization participation / accepted-terms lifecycle
+
+The SDK now exposes:
+
+- `removeOrganizationTerms()`
+- `pollRemoveOrganizationTermsResponse()`
+
+Frontend method pair for offboarding:
+
+1. call `removeOrganizationTerms()`
+2. then poll with `pollRemoveOrganizationTermsResponse()`
+
+For local manual testing today, the realistic flow is:
+
+1. `_verify`
+2. `_create`
+3. `_remove`
+
+The full organization offboarding cycle is:
+
+1. `_verify`
+2. `_create`
+3. `_remove`
+4. new `_verify`
+5. new `_create`
+6. new `_remove`
+
+Example:
+
+```ts
+client.setControllerMessageSigningPublicKey('ES384', 'controller-msg-es384-001', {
+  kty: 'EC',
+  crv: 'P-384',
+  x: '<x>',
+  y: '<y>'
+});
+
+const removeJob = await client.removeOrganizationTerms({
+  organization: {
+    identifier: 'did:web:globaldatacare.es:animal-care:organization:taxid:VATES-B42215152',
+    taxID: 'VATES-B42215152'
+  },
+  reason: 'organization-requested-removal'
+});
+
+const removeResponse = await client.pollRemoveOrganizationTermsResponse(removeJob.thid);
+```
+
+If the organization is created again after `_remove`, the same pair is used again to confirm a second full cycle:
+
+```ts
+const secondRemoveJob = await client.removeOrganizationTerms({
+  organization: {
+    identifier: 'did:web:globaldatacare.es:animal-care:organization:taxid:VATES-B42215152',
+    taxID: 'VATES-B42215152'
+  },
+  reason: 'organization-requested-removal'
+});
+
+const secondRemoveResponse = await client.pollRemoveOrganizationTermsResponse(secondRemoveJob.thid);
+```
 
 ## Verify Response Shape
 
@@ -302,3 +496,45 @@ import { prepareDidCommRequest, includeVpTokenInMessage, includeFileInMessage, g
 These utilities already live in `gdc-common-utils-ts` and are also re-exported by other SDKs such as `dataconv-client-sdk-ts`.
 
 If you want to depend on the common base module directly, import them from `gdc-common-utils-ts/utils/didcomm`.
+
+## Backend Auth (Node/Backend)
+
+This SDK now includes ICA backend auth lifecycle helpers for the custom async profile (`identity-exchange.v1`):
+
+- `controllerExchange(...)` + `pollControllerExchangeResponse(...)`
+- `createApiKey(...)`, `disableApiKey(...)`, `removeApiKey(...)`, `searchApiKeys(...)`
+- `pollApiKeyActionResponse(thid, bearerToken, action)`
+- `identityDcr(...)`, `pollIdentityDcrResponse(...)`
+- `identityCode(...)`, `pollIdentityCodeResponse(...)`
+- `identityToken(...)`, `pollIdentityTokenResponse(...)`
+- `identityExchange(...)`, `pollIdentityExchangeResponse(...)`
+- `runBackendAuthFlow(...)` for DCR + PKCE + exchange orchestration
+
+Notes:
+
+- This is the ICA custom backend flow (`/_dcr -> /_code -> /_token -> /_exchange`) with async submit/poll operations.
+- SMART Backend Services (`client_credentials + private_key_jwt`) is a different profile and is not the same flow.
+
+Minimal identity flow example:
+
+```ts
+const dcrSubmit = await client.identityDcr('<api-key-value>', {}, {
+  bearerToken: '<controller-access-token>',
+  meta: {
+    jws: {
+      protected: {
+        alg: 'ES384',
+        jwk: { kty: 'EC', crv: 'P-384', x: '<x>', y: '<y>' }
+      }
+    }
+  }
+});
+await client.pollIdentityDcrResponse(dcrSubmit.thid, '<controller-access-token>');
+
+const codeSubmit = await client.identityCode({
+  client_id: '<api-key-value>',
+  code_challenge: '<pkce-s256-challenge>',
+  code_challenge_method: 'S256'
+}, { bearerToken: '<controller-access-token>' });
+const codeResponse = await client.pollIdentityCodeResponse(codeSubmit.thid, '<controller-access-token>');
+```

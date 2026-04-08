@@ -8,8 +8,12 @@ export { DidCommMessage, DidCommAttachment } from 'gdc-common-utils-ts/utils/did
 export { VcManager } from './VcManager';
 export { VpManager } from './VpManager';
 export type {
+  ApiKeyActionRequest,
+  BackendAuthRequestOptions,
   IcaConfiguredPublicKey,
+  IcaBackendAuthResponse,
   CreateOrgDidDocumentRequest,
+  ControllerExchangeRequestBody,
   IcaCreateOrgDidDocumentResponse,
   IcaCredential,
   IcaCrypto,
@@ -21,6 +25,12 @@ export type {
   IcaLegalRepresentativeCredentialSubject,
   IcaOrganizationCredential,
   IcaOrganizationCredentialSubject,
+  IdentityCodeBody,
+  IdentityDcrBody,
+  IdentityExchangeBody,
+  IdentityTokenBody,
+  RunBackendAuthFlowRequest,
+  RunBackendAuthFlowResult,
   IcaVerifyTermsResponse,
   VerifyTermsOptions
 } from './types';
