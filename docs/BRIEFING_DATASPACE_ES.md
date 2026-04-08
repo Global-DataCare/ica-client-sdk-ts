@@ -15,6 +15,21 @@ El alcance cubre:
 3. `DataConversion` (normalización y producción de gemelos digitales).
 4. Bibliotecas de integración (Node/Python/backend y frontend).
 
+## 1.1 Cómo usar este documento
+
+Es un único documento base. No hay versión "de negocio" y otra "técnica".
+
+Lectura recomendada:
+
+1. Para dirección de proyecto: secciones 1, 2, 3 y 6.
+2. Para auditoría: secciones 4, 6 y 7.
+3. Para desarrollo: secciones 3, 4, 5 y 8.
+
+Regla de redacción aplicada:
+
+1. cada término técnico aparece acompañado de una explicación funcional,
+2. cuando se usa una etiqueta estándar (`thid`, `id_token`, `client_id`), se explica su significado operativo.
+
 ## 2. Separación de responsabilidades
 
 ## 2.1 ICA (Identity and Compliance Authority)
@@ -218,8 +233,14 @@ Solo tras estas validaciones se permite:
 - identidad técnica (DCR + prueba de posesión de clave + client credentials).
 3. Validar siempre estado de confianza antes de habilitar operación sensible.
 
-## 9. Prompt reutilizable (ES, versión formal)
+## 9. Criterios para documentos derivados
 
-Usa este prompt para generar documentación equivalente:
+Cuando este documento se reutilice para presentaciones, propuestas o anexos, se deben mantener estos mínimos:
 
-"Redacta un documento técnico-formal para un ecosistema de data space sanitario con tres capas: ICA (identidad/compliance), GW (operación) y DataConversion (normalización/gemelos digitales). Debe servir a dirección, auditoría y desarrollo. Incluye: (1) separación de responsabilidades API vs biblioteca de integración, (2) flujo humano con credencial de identidad (`id_token`) y `_exchange`, (3) flujo técnico con DCR usando `client_id` (API key/invitation code) y emisión de credencial de acceso granular por endpoint/acción, (4) coexistencia de perfil custom `identity-exchange.v1` y SMART Backend Services (`client_credentials + private_key_jwt`), (5) rol de FHIR IPS y Composition como índice del gemelo digital, (6) publicación/catalogación DCAT3 por perfil funcional de recurso, y (7) controles Gaia-X/Clearing House incluyendo validación de vigencia, revocación y `kid`/thumbprint RFC 7638 de Organization/PractitionerRole."
+1. separación ICA (identidad/compliance) vs GW/DataConversion (operación de datos),
+2. distinción explícita entre identidad humana e identidad técnica,
+3. descripción de perfiles de autenticación sin mezclar flujos (`identity-exchange.v1` y SMART backend estándar),
+4. control de confianza Gaia-X/Clearing House con validación de vigencia, revocación y `kid`/thumbprint (RFC 7638),
+5. trazabilidad de autorización granular por endpoint/acción,
+6. tratamiento de `Composition` como índice y de IPS como resumen interoperable,
+7. catalogación DCAT3 por perfil funcional de datos.
