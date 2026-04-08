@@ -33,6 +33,10 @@ Critical clarification:
 - It is not the human wallet VP/Clearing House flow.
 - Human/controller authentication and organization trust checks happen before backend API key issuance, not inside `_dcr`.
 
+Bootstrap variants:
+1. Controller-led DCR: controller creates API key and executes `_dcr` with backend public key; backend skips `_dcr` when already `bound`.
+2. Backend-led DCR: controller creates API key, backend executes `_dcr` itself.
+
 Reference for exact sequence and contracts:
 - `dataspace-ica-ts/docs/backend-auth-migration.md`
 - `dataspace-ica-ts/src/api/openapi.ts`

@@ -495,10 +495,11 @@ For security audits, keep these two variants explicit:
 
 1. Controller-led provisioning:
 - A human controller authenticates in ICA and creates backend API keys (`/_create`).
-- The backend receives the API key out-of-band and runs DCR (`/_dcr`) with its own technical public key.
+- The controller executes `_dcr` using backend public key material provided out-of-band.
+- Backend starts in pre-bound mode and should skip `_dcr` if binding is already `bound`.
 
 2. Backend-led binding (same API contract):
-- The controller still authorizes API key issuance, but the backend performs DCR itself through the SDK.
+- The controller still authorizes API key issuance, but backend performs `_dcr` itself through the SDK.
 - No human VP token is required inside `_dcr`; `_dcr` is technical key binding for backend identity.
 
-After DCR is bound, runtime token issuance uses `_code -> _token -> _exchange` (or SMART standard if the server supports that profile).
+After binding is `bound`, runtime token issuance uses `_code -> _token -> _exchange` for `identity-exchange.v1`.
