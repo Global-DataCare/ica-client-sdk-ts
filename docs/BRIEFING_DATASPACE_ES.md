@@ -1,246 +1,207 @@
-# Documento Marco (ES): Identidad, Operación y Acceso en el Data Space
+# Documento Base (ES): Identidad, Acceso y Operación de Datos en el Data Space
 
-## 1. Propósito y alcance
+## 1. Qué resuelve este documento
 
-Este documento define un marco único, comprensible y auditable para:
+Este documento explica, en un único texto, cómo funciona el ecosistema para:
 
-1. Dirección de proyecto (visión de negocio y decisión).
-2. Auditoría de seguridad/compliance (controles verificables).
-3. Desarrollo (flujo técnico y responsabilidades por servicio).
+1. dirección de proyecto,
+2. auditoría de seguridad y cumplimiento,
+3. desarrollo de software.
 
-El alcance cubre:
+Objetivo: que cualquier persona entienda quién hace qué, en qué orden, y con qué controles.
 
-1. `ICA` (identidad y cumplimiento de onboarding).
-2. `GW` (operación de mensajería y gestión clínica/organizativa).
-3. `DataConversion` (normalización y producción de gemelos digitales).
-4. Bibliotecas de integración (Node/Python/backend y frontend).
+## 2. Componentes y responsabilidad de cada uno
 
-## 1.1 Cómo usar este documento
+## 2.1 ICA (autoridad de identidad y cumplimiento)
 
-Es un único documento base. No hay versión "de negocio" y otra "técnica".
+ICA se encarga de:
 
-Lectura recomendada:
+1. validar la adhesión contractual de una organización,
+2. emitir credenciales verificables de organización y representante,
+3. publicar la identidad técnica (documento DID y claves públicas),
+4. mantener evidencia verificable del alta y estado de confianza.
 
-1. Para dirección de proyecto: secciones 1, 2, 3 y 6.
-2. Para auditoría: secciones 4, 6 y 7.
-3. Para desarrollo: secciones 3, 4, 5 y 8.
+## 2.2 GW (nodo operador para organizaciones alojadas)
 
-Regla de redacción aplicada:
+GW es la implementación del nodo operador multiorganización. Se encarga de:
 
-1. cada término técnico aparece acompañado de una explicación funcional,
-2. cuando se usa una etiqueta estándar (`thid`, `id_token`, `client_id`), se explica su significado operativo.
+1. operar la mensajería y procesos de la organización alojada,
+2. gestionar profesionales, permisos y acceso de emergencia,
+3. gestionar la activación y uso del índice de datos de personas y activos.
 
-## 2. Separación de responsabilidades
+## 2.3 DataConversion (servicio de transformación y gemelos digitales)
 
-## 2.1 ICA (Identity and Compliance Authority)
+DataConversion se encarga de:
 
-ICA es la autoridad de identidad y cumplimiento. Sus funciones son:
+1. recibir datos de diferentes sistemas,
+2. transformarlos y normalizarlos,
+3. generar y mantener gemelos digitales por organización alojada,
+4. publicar conjuntos de datos catalogables.
 
-1. Verificar la adhesión contractual de la organización.
-2. Emitir credenciales verificables (VC) de organización y representante/controlador.
-3. Generar/publicar material de identidad (DID Document y claves públicas asociadas).
-4. Mantener evidencias verificables de onboarding y estado de confianza.
+## 2.4 Biblioteca de integración (Node/Python/frontend)
 
-## 2.2 GW (Gateway API)
+La biblioteca de integración no reemplaza la API. Su papel es:
 
-GW es la capa operativa del tenant. Sus funciones son:
+1. simplificar llamadas seguras a los servicios,
+2. gestionar el proceso "enviar petición y consultar resultado",
+3. reducir errores de integración y mejorar trazabilidad.
 
-1. Gestionar profesionales y roles de la organización alojada.
-2. Ejecutar mensajería e intercambio operativo entre actores.
-3. Gestionar permisos y políticas de acceso (incluido modo emergencia).
-4. Soportar activación y operación del índice de datos de individuo.
+## 3. Historia de usuario completa (de extremo a extremo)
 
-## 2.3 DataConversion Service API
+## 3.1 Alta de una organización
 
-DataConversion es la capa de transformación y publicación técnica. Sus funciones son:
+1. Un representante legal firma el proceso de adhesión.
+2. ICA valida y emite credenciales verificables.
+3. ICA publica identidad técnica y evidencia verificable.
+4. La organización queda habilitada para alojarse y operar en GW/DataConversion.
 
-1. Ingerir datos fuente.
-2. Normalizar/mapear datos clínicos y operativos.
-3. Publicar datasets/colecciones derivados.
-4. Alimentar gemelos digitales.
+## 3.2 Activación de un cliente de software (backend o app)
 
-## 2.4 Bibliotecas de integración
+1. El representante entra con su proveedor de identidad habitual (por ejemplo Google, eID u otro).
+2. El sistema obtiene una credencial de identidad de esa persona.
+3. Se ejecuta un intercambio de identidad (`_exchange`) para autorizar acciones de administración.
+4. El representante crea:
+- una API key para un backend, o
+- un código de invitación para un profesional/app.
 
-Las bibliotecas de integración no sustituyen las APIs. Su función es:
+## 3.3 Vinculación técnica de ese cliente
 
-1. Encapsular autenticación/autorización técnica.
-2. Estandarizar el patrón asíncrono de "envío inicial + consulta posterior de estado" usando un identificador del hilo de mensajes entre cliente de software y servicio API (`thid`).
-3. Reducir errores de integración y asegurar trazabilidad.
+1. El cliente presenta su identificador técnico (`client_id`), que en este diseño proviene de API key o código de invitación.
+2. Se registra la vinculación técnica (`_dcr`) entre ese `client_id` y la clave pública del cliente.
+3. Desde ese momento, el cliente puede solicitar credenciales de acceso por operación concreta.
 
-## 3. Modelo de identidad y acceso
+## 3.4 Operación diaria
 
-## 3.1 Fase humana (controller/representante)
+1. El cliente solicita credencial de acceso para una operación concreta de la API.
+2. Si cumple validaciones de confianza, recibe credencial de acceso.
+3. Invoca el endpoint de negocio autorizado.
 
-1. El controller se autentica con un proveedor de identidad confiable (por ejemplo Google u otro OIDC).
-2. Se obtiene una credencial de identidad (`id_token`).
-3. Se ejecuta el intercambio en `/_exchange` para contexto autorizado en el ecosistema.
-4. El controller puede:
-- crear API keys para backend, o
-- crear invitation codes para profesionales/usuarios.
+## 4. Dos formas de autenticación técnica (explicadas sin jerga)
 
-## 3.2 Fase técnica (wallet de backend o wallet de app)
+Aquí hay dos caminos posibles. Son diferentes y no deben mezclarse en la misma transacción.
 
-1. El cliente técnico utiliza `client_id` (API key o invitation code según flujo).
-2. Ejecuta DCR (`/_dcr`) para vincular identidad técnica con clave pública.
-3. Solicita una credencial de acceso granular para un endpoint concreto (según el perfil de seguridad habilitado).
-4. Invoca endpoint de negocio con credencial de acceso tipo Bearer en la cabecera de autorización.
+## 4.1 Camino propio del ecosistema (`identity-exchange.v1`)
 
-## 3.3 Regla de diseño de endpoints
+Quién lo usa:
 
-En el diseño actual, la operación suele expresarse al final del path como `<action>`.
-Esto facilita:
+1. servicios que siguen la secuencia técnica definida por este ecosistema.
 
-1. autorización granular por operación,
-2. trazabilidad por acción,
-3. pruebas de seguridad por ruta concreta.
+Quién lo ejecuta:
 
-## 4. Perfiles de autenticación
-
-## 4.1 Perfil custom del ecosistema (`identity-exchange.v1`)
+1. el cliente de software (backend/app), normalmente a través de la biblioteca de integración.
 
 Secuencia:
 
-1. `/_dcr`
-2. `/_code`
-3. `/_token`
-4. `/_exchange`
+1. `/_dcr` (vinculación técnica del cliente),
+2. `/_code`,
+3. `/_token`,
+4. `/_exchange`.
 
-Características:
+Cómo se entiende:
 
-1. Flujo asíncrono `submit/poll`.
-2. `client_id` técnico obligatorio por especificación.
-3. DCR es vínculo técnico, no validación humana.
+1. `/_dcr` no valida a la persona; valida la identidad técnica del software,
+2. el identificador técnico (`client_id`) es obligatorio por diseño de esta secuencia,
+3. el proceso es asíncrono: primero se envía la petición y luego se consulta el estado con el identificador del hilo de mensajes.
 
-## 4.2 Perfil estándar SMART Backend Services (OAuth2)
+## 4.2 Camino estándar SMART Backend Services
 
-Secuencia estándar:
+Quién lo usa:
 
-1. `client_credentials`
-2. `private_key_jwt` (proof of possession)
+1. integraciones que siguen el estándar SMART on FHIR para backend a backend.
 
-Características:
+Quién lo ejecuta:
 
-1. No usa la cadena custom `/_dcr/_code/_token/_exchange`.
-2. Adecuado para escenarios SMART-on-FHIR backend-to-backend.
-3. Requiere registro/configuración compatible del authorization server.
+1. el backend cliente, contra un servidor de autorización compatible.
 
-## 4.3 Regla de interoperabilidad
+Secuencia:
 
-Ambos perfiles pueden coexistir, pero no deben mezclarse en la misma transacción.
+1. `client_credentials`,
+2. `private_key_jwt` (prueba de que el cliente controla su clave privada).
 
-## 5. FHIR, resumen interoperable e índice de secciones del gemelo digital
+Diferencia clave:
 
-## 5.1 SMART on FHIR
+1. este camino no usa `/_dcr/_code/_token/_exchange`.
 
-Se usa para autorización de acceso a recursos FHIR con permisos granulares.
-La credencial de acceso debe estar acotada por:
+## 5. Historia de datos del sujeto (IPS + Composition) y gemelo digital
 
-1. endpoint/acción,
-2. ámbito clínico,
-3. política del tenant.
+En este documento usamos "historia de datos del sujeto" para hablar de la vista interoperable del sujeto.
 
-## 5.2 Resumen interoperable (IPS) e índice de secciones (Composition)
+El sujeto puede ser:
 
-En este marco:
+1. una persona,
+2. una organización,
+3. un activo (por ejemplo un edificio), según el dominio.
 
-1. `Composition` actúa como índice funcional del gemelo digital (secciones y referencias a documentos/recursos).
-2. Cada sección puede referenciar documentos/recursos en diferentes data providers.
-3. `IPS` se interpreta como resumen interoperable que consume ese índice.
-4. Este patrón de "índice + referencias" es aplicable fuera del sector salud cuando existe un sujeto y múltiples fuentes documentales.
+## 5.1 Qué papel tiene `Composition`
 
-## 5.3 Datasets DCAT3 y perfiles FHIR
+`Composition` funciona como índice de secciones y referencias:
 
-Para catálogo de datos:
+1. enumera qué bloques de información componen la historia,
+2. apunta a documentos o recursos que pueden residir en distintos proveedores de datos.
 
-1. cada perfil/colección funcional (por ejemplo `vital signs`) debe modelarse como dataset diferenciado,
-2. aunque ciertos datos compartan tipo base FHIR (por ejemplo `Observation`), el perfil funcional se trata como activo distinto.
+## 5.2 Qué papel tiene IPS
 
-Implicación:
+IPS es un resumen interoperable construido a partir del índice y sus referencias.
 
-1. el catálogo DCAT3 debe reflejar granularidad semántica real,
-2. no solo el tipo técnico base.
+Interpretación práctica:
 
-## 6. Gaia-X / Data Space Protocol: controles operativos
+1. `Composition` organiza y referencia,
+2. IPS resume de forma intercambiable entre sistemas.
 
-## 6.1 Verificación de confianza (Clearing House)
+## 5.3 Relación con DataConversion
 
-Antes de conceder acceso operativo, el sistema debe verificar:
+DataConversion puede transformar esa historia de datos a distintos formatos/versiones:
 
-1. validez de VC de `Organization` y `PractitionerRole` (o equivalente),
-2. vigencia temporal,
-3. estado de revocación/suspensión,
-4. cadena de confianza del emisor,
-5. correspondencia de clave pública activa.
+1. FHIR R4, FHIR R5 u otros modelos,
+2. versiones derivadas mediante reglas de transformación sobre metadatos,
+3. salida específica para el consumidor final manteniendo trazabilidad del origen.
 
-## 6.2 Regla de `kid` y thumbprint
+## 6. Catálogo de datos (DCAT3) y granularidad
 
-Control recomendado:
+Regla de catálogo:
 
-1. resolver la clave pública activa desde DID Document/JWKS,
-2. verificar que `kid` corresponde al thumbprint esperado (RFC 7638) según política,
-3. rechazar credenciales o credenciales de acceso con `kid` no reconocido, revocado o fuera de política.
+1. cada perfil funcional de datos debe tratarse como conjunto de datos propio,
+2. aunque dos perfiles compartan el mismo tipo base técnico.
 
-## 6.3 Resultado esperado
+Ejemplo:
 
-Solo tras estas validaciones se permite:
+1. "signos vitales" puede usar recursos de tipo `Observation`,
+2. pero se cataloga como conjunto funcional distinto por su semántica y uso.
 
-1. emisión/aceptación de credencial de acceso granular,
-2. acceso a endpoints operativos,
-3. consumo de datasets clínicos.
+## 7. Controles Gaia-X / Clearing House (qué se verifica antes de dar acceso)
 
-## 7. Matriz de controles para auditoría
+Antes de permitir acceso operativo, se valida:
 
-## 7.1 Identidad y segregación de funciones
+1. vigencia de credenciales de organización y profesional,
+2. estado de revocación/suspensión,
+3. cadena de confianza del emisor,
+4. validez de la clave pública activa.
 
-1. ICA separado funcionalmente de GW/DataConversion.
-2. Proceso humano (controller) separado del proceso técnico (wallet backend/app).
-3. Evidencia de onboarding y estado de confianza trazable por tenant.
+Además, se valida el ID normalizado de clave pública:
 
-## 7.2 Acceso técnico y criptografía
+1. se obtiene la clave pública activa desde DID Document o JWKS,
+2. se compara su ID de clave pública normalizado (`kid`) con el valor esperado según RFC 7638 (thumbprint),
+3. se rechaza acceso si esa clave no es válida, está revocada o fuera de política.
 
-1. DCR con vínculo `client_id` + clave pública técnica.
-2. Emisión de credencial de acceso Bearer con permisos granulares por endpoint/acción.
-3. Control de rotación/revocación de claves y credenciales.
-4. Verificación de `kid`/thumbprint y estado de confianza en Clearing House.
+## 8. Términos clave (traducción funcional)
 
-## 7.3 Interoperabilidad de datos
+1. `id_token`: credencial de identidad emitida por un proveedor de identidad.
+2. `client_id`: identificador técnico del cliente de software (derivado de API key o invitación según flujo).
+3. `DCR`: registro de cliente de software y su clave pública.
+4. `Bearer`: credencial de acceso que autoriza una operación concreta.
+5. `thid`: identificador del hilo de mensajes entre cliente de software y servicio API.
+6. `Location` (cabecera HTTP): URL de consulta de estado devuelta por el servidor.
+7. `Retry-After` (cabecera HTTP): tiempo mínimo recomendado antes de volver a consultar estado.
+8. `kid`: ID normalizado de la clave pública usada para verificar firmas.
 
-1. SMART on FHIR para acceso autorizado.
-2. Uso de resumen interoperable (IPS) e índice de secciones (Composition) para indexación y navegación clínica interoperable.
-3. DCAT3 con datasets por perfil funcional, no solo por tipo base.
+## 9. Criterios obligatorios para documentos derivados
 
-## 8. Modelo de integración para equipos de desarrollo
+Si este texto se usa como base para presentaciones o anexos, siempre debe conservar:
 
-## 8.1 Qué implementa el backend consumidor
-
-1. Configuración de endpoints y credenciales.
-2. Custodia de claves (wallet/KMS/HSM).
-3. Selección del perfil de autenticación (`identity-exchange.v1` o SMART backend estándar).
-4. Política de reintentos, logging y auditoría.
-
-## 8.2 Qué aporta la biblioteca de integración
-
-1. Estructuras de entrada/salida claras para reducir errores.
-2. Gestión secuencial del proceso de autenticación y acceso.
-3. Gestión del identificador del hilo de mensajes (`thid`), de la URL de consulta de estado devuelta por el servidor (cabecera HTTP `Location`) y del tiempo mínimo de espera recomendado antes de volver a consultar estado (cabecera HTTP `Retry-After`).
-4. Conectores para distintos entornos de ejecución.
-
-## 8.3 Reglas de implementación
-
-1. No mezclar el contenido de negocio con la lógica criptográfica de firma/cifrado del sobre de transporte.
-2. Mantener distinción explícita entre:
-- identidad humana (credencial de identidad + intercambio de identidad),
-- identidad técnica (DCR + prueba de posesión de clave + client credentials).
-3. Validar siempre estado de confianza antes de habilitar operación sensible.
-
-## 9. Criterios para documentos derivados
-
-Cuando este documento se reutilice para presentaciones, propuestas o anexos, se deben mantener estos mínimos:
-
-1. separación ICA (identidad/compliance) vs GW/DataConversion (operación de datos),
-2. distinción explícita entre identidad humana e identidad técnica,
-3. descripción de perfiles de autenticación sin mezclar flujos (`identity-exchange.v1` y SMART backend estándar),
-4. control de confianza Gaia-X/Clearing House con validación de vigencia, revocación y `kid`/thumbprint (RFC 7638),
-5. trazabilidad de autorización granular por endpoint/acción,
-6. tratamiento de `Composition` como índice y de IPS como resumen interoperable,
-7. catalogación DCAT3 por perfil funcional de datos.
+1. separación ICA (identidad/cumplimiento) vs GW/DataConversion (operación),
+2. separación entre validación humana e identidad técnica del software,
+3. explicación de los dos caminos de autenticación técnica sin mezclarlos,
+4. validaciones de confianza de credenciales y claves públicas (incluido `kid`),
+5. autorización granular por operación de API,
+6. explicación de historia de datos del sujeto (índice + resumen + transformaciones),
+7. catalogación DCAT3 por perfil funcional.
