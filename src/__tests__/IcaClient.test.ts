@@ -685,6 +685,37 @@ describe('IcaClient', () => {
     expect(submitPayload?.meta?.jws?.protected?.kid).toBe('controller-es384-001');
   });
 
+  it('should submit identity DCR using parameter-first binding helper', async () => {
+    mockedAxios.request?.mockResolvedValueOnce({
+      status: 202,
+      headers: { location: '/dcr-response', 'retry-after': '1' }
+    });
+
+    const submit = await client.identityDcrWithBinding({
+      clientId: 'api-key-value-001',
+      bearerToken: 'controller-token',
+      controllerSigAlg: 'ES384',
+      controllerSigKid: 'controller-es384-001',
+      controllerSigPublicJwk: { kty: 'EC', crv: 'P-384', x: 'x', y: 'y' },
+      transportProtection: 'plain'
+    });
+
+    expect(submit.location).toBe('/dcr-response');
+    const submitPayload: any = mockedAxios.request.mock.calls[0]?.[0]?.data;
+    expect(submitPayload?.client_id).toBe('api-key-value-001');
+    expect(submitPayload?.meta?.jws?.protected?.alg).toBe('ES384');
+    expect(submitPayload?.meta?.jws?.protected?.kid).toBe('controller-es384-001');
+  });
+
+  it('should reject unsupported transport protection in identityDcrWithBinding', async () => {
+    await expect(client.identityDcrWithBinding({
+      clientId: 'api-key-value-001',
+      bearerToken: 'controller-token',
+      controllerSigPublicJwk: { kty: 'EC', crv: 'P-384', x: 'x', y: 'y' },
+      transportProtection: 'signed'
+    })).rejects.toThrow('transportProtection=signed is not yet supported');
+  });
+
   it('should run backend auth flow helper end-to-end', async () => {
     mockedAxios.request
       ?.mockResolvedValueOnce({ status: 202, headers: { location: '/dcr-response', 'retry-after': '1' } })
@@ -714,6 +745,58 @@ describe('IcaClient', () => {
     expect(result.codeChallenge).toBe('code-challenge-123');
     expect(result.exchange?.body?.data?.[0]?.resource).toEqual({ access_token: 'access-token-abc' });
     expect(mockedAxios.request).toHaveBeenCalledTimes(8);
+  });
+
+  it('should skip DCR in auto mode when known binding status is bound', async () => {
+    mockedAxios.request
+      ?.mockResolvedValueOnce({ status: 202, headers: { location: '/code-response', 'retry-after': '1' } })
+      .mockResolvedValueOnce({ status: 200, data: { body: { data: [{ resource: { code: 'code-123' } }] } }, headers: {} })
+      .mockResolvedValueOnce({ status: 202, headers: { location: '/token-response', 'retry-after': '1' } })
+      .mockResolvedValueOnce({ status: 200, data: { body: { data: [{ resource: { id_token: 'id-token-xyz' } }] } }, headers: {} })
+      .mockResolvedValueOnce({ status: 202, headers: { location: '/exchange-response', 'retry-after': '1' } })
+      .mockResolvedValueOnce({ status: 200, data: { body: { data: [{ resource: { access_token: 'access-token-abc' } }] } }, headers: {} });
+
+    const result = await client.runBackendAuthFlow({
+      bearerToken: 'controller-token',
+      clientId: 'api-key-value-001',
+      codeVerifier: 'code-verifier-123',
+      codeChallenge: 'code-challenge-123',
+      dcrMode: 'auto',
+      knownBindingStatus: 'bound'
+    });
+
+    expect(result.dcr?.body?.data?.[0]?.resource).toEqual({
+      status: 'bound',
+      action: 'dcr-skipped',
+      reason: 'binding-already-bound'
+    });
+    expect(mockedAxios.request).toHaveBeenCalledTimes(6);
+    const calledUrls = mockedAxios.request.mock.calls.map(call => call[0]?.url || '');
+    expect(calledUrls.join(' ')).not.toContain('/identity/auth/_dcr');
+  });
+
+  it('should auto-check binding with _search and skip DCR when already bound', async () => {
+    mockedAxios.request
+      ?.mockResolvedValueOnce({ status: 202, headers: { location: '/search-response', 'retry-after': '1' } })
+      .mockResolvedValueOnce({ status: 200, data: { body: { data: [{ resource: { bindingStatus: 'bound' } }] } }, headers: {} })
+      .mockResolvedValueOnce({ status: 202, headers: { location: '/code-response', 'retry-after': '1' } })
+      .mockResolvedValueOnce({ status: 200, data: { body: { data: [{ resource: { code: 'code-123' } }] } }, headers: {} })
+      .mockResolvedValueOnce({ status: 202, headers: { location: '/token-response', 'retry-after': '1' } })
+      .mockResolvedValueOnce({ status: 200, data: { body: { data: [{ resource: { id_token: 'id-token-xyz' } }] } }, headers: {} })
+      .mockResolvedValueOnce({ status: 202, headers: { location: '/exchange-response', 'retry-after': '1' } })
+      .mockResolvedValueOnce({ status: 200, data: { body: { data: [{ resource: { access_token: 'access-token-abc' } }] } }, headers: {} });
+
+    await client.runBackendAuthFlow({
+      bearerToken: 'controller-token',
+      clientId: 'api-key-value-001',
+      codeVerifier: 'code-verifier-123',
+      codeChallenge: 'code-challenge-123',
+      dcrMode: 'auto'
+    });
+
+    const calledUrls = mockedAxios.request.mock.calls.map(call => call[0]?.url || '');
+    expect(calledUrls[0]).toContain('/api-key/org.schema/action/_search');
+    expect(calledUrls.join(' ')).not.toContain('/identity/auth/_dcr');
   });
 
   it('should throw if required did document fields missing', async () => {

@@ -342,6 +342,19 @@ export interface IdentityDcrBody {
   [key: string]: unknown;
 }
 
+export type TransportProtection = 'plain' | 'signed' | 'encrypted';
+
+export interface IdentityDcrBindingRequest {
+  clientId: string;
+  bearerToken: string;
+  controllerSigPublicJwk: IcaJwk;
+  controllerSigAlg?: string;
+  controllerSigKid?: string;
+  body?: IdentityDcrBody;
+  thid?: string;
+  transportProtection?: TransportProtection;
+}
+
 export interface IdentityCodeBody {
   client_id: string;
   code_challenge: string;
@@ -374,6 +387,9 @@ export interface RunBackendAuthFlowRequest {
   subjectTokenType?: string;
   dcrBody?: IdentityDcrBody;
   meta?: IcaDidCommMessageMeta;
+  dcrMode?: 'force' | 'skip' | 'auto';
+  knownBindingStatus?: 'bound' | 'pending_dcr' | 'unknown';
+  apiKeySearchRequest?: ApiKeyActionRequest;
 }
 
 export interface RunBackendAuthFlowResult {

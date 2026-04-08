@@ -58,7 +58,8 @@ Agents must keep these semantics explicit in docs/code reviews:
 
 Current SDK status:
 - backend-auth paths are currently implemented for `application/didcomm-plain+json`.
-- parameter-first signed/encrypted envelope generation is documented as target behavior for the next code phase.
+- `identityDcrWithBinding(...)` is implemented for parameter-first DCR input.
+- signed/encrypted envelope generation for backend-auth remains outside current method set.
 
 ## Parameter-First Contract (for agents)
 
@@ -95,12 +96,14 @@ Reference for exact sequence and contracts:
 - `createApiKey(...)`, `disableApiKey(...)`, `removeApiKey(...)`, `searchApiKeys(...)`
 - `pollApiKeyActionResponse(thid)`
 - `identityDcr(...)`, `pollIdentityDcrResponse(thid)`
+- `identityDcrWithBinding(...)` (parameter-first DCR)
 - `identityCode(...)`, `pollIdentityCodeResponse(thid)`
 - `identityToken(...)`, `pollIdentityTokenResponse(thid)`
 - `identityExchange(...)`, `pollIdentityExchangeResponse(thid)`
 
 Orchestration helper:
 - `runBackendAuthFlow(...)` for `_create -> _dcr -> _code -> _token -> _exchange`
+  - supports `dcrMode`: `force|skip|auto`
 
 ## Testing Requirements
 When changing auth/transport behavior:

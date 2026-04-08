@@ -454,6 +454,7 @@ This SDK includes ICA backend-auth helpers for the custom async profile `identit
 - `createApiKey(...)`, `disableApiKey(...)`, `removeApiKey(...)`, `searchApiKeys(...)`
 - `pollApiKeyActionResponse(thid, bearerToken, action)`
 - `identityDcr(...)`, `pollIdentityDcrResponse(...)`
+- `identityDcrWithBinding(...)` (parameter-first DCR helper)
 - `identityCode(...)`, `pollIdentityCodeResponse(...)`
 - `identityToken(...)`, `pollIdentityTokenResponse(...)`
 - `identityExchange(...)`, `pollIdentityExchangeResponse(...)`
@@ -484,7 +485,8 @@ How `meta.jws.protected` should be handled depends on transport profile:
 
 Current implementation status:
 - Backend-auth methods in this SDK currently target `application/didcomm-plain+json`.
-- Parameter-first envelope generation for signed/encrypted profiles is documented below and will be implemented in the next code step.
+- `identityDcrWithBinding(...)` is implemented for parameter-first DCR input.
+- Signed/encrypted envelope generation is still handled outside these backend-auth methods.
 
 ### Parameter-First Inputs (audit contract)
 
@@ -525,18 +527,17 @@ const codeSubmit = await client.identityCode({
 const codeResponse = await client.pollIdentityCodeResponse(codeSubmit.thid, '<controller-access-token>');
 ```
 
-Target parameter-first style (documented contract for next code iteration):
+Parameter-first DCR helper (implemented):
 
 ```ts
-// Intended shape (without passing raw meta JSON):
-// await client.identityDcrWithBinding({
-//   clientId: '<api-key-value>',
-//   bearerToken: '<controller-access-token>',
-//   controllerSigAlg: 'ES384',
-//   controllerSigKid: 'controller-es384-001',
-//   controllerSigPublicJwk: { kty: 'EC', crv: 'P-384', x: '<x>', y: '<y>' },
-//   transportProtection: 'plain'
-// });
+await client.identityDcrWithBinding({
+  clientId: '<api-key-value>',
+  bearerToken: '<controller-access-token>',
+  controllerSigAlg: 'ES384',
+  controllerSigKid: 'controller-es384-001',
+  controllerSigPublicJwk: { kty: 'EC', crv: 'P-384', x: '<x>', y: '<y>' },
+  transportProtection: 'plain'
+});
 ```
 
 ### Backend Onboarding Variants
@@ -553,3 +554,9 @@ For security audits, keep these two variants explicit:
 - No human VP token is required inside `_dcr`; `_dcr` is technical key binding for backend identity.
 
 After binding is `bound`, runtime token issuance uses `_code -> _token -> _exchange` for `identity-exchange.v1`.
+
+`runBackendAuthFlow(...)` now supports DCR execution policy:
+
+- `dcrMode: "force"` (default): always run `_dcr`.
+- `dcrMode: "skip"`: skip `_dcr` explicitly.
+- `dcrMode: "auto"`: skip `_dcr` when known/observed binding is `bound`.

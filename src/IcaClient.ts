@@ -28,6 +28,7 @@ import {
   IcaOrganizationCredential,
   IcaOrganizationCredentialSubject,
   IdentityCodeBody,
+  IdentityDcrBindingRequest,
   IdentityDcrBody,
   IdentityExchangeBody,
   IdentityTokenBody,
@@ -277,6 +278,42 @@ export class IcaClient {
       throw new Error('Token response does not contain id_token/subject_token.');
     }
     return idToken;
+  }
+
+  private buildDcrMetaFromBinding(input: IdentityDcrBindingRequest): IcaDidCommMessageMeta {
+    return {
+      jws: {
+        protected: {
+          alg: input.controllerSigAlg || 'ES384',
+          ...(input.controllerSigKid ? { kid: input.controllerSigKid } : {}),
+          jwk: input.controllerSigPublicJwk
+        }
+      }
+    };
+  }
+
+  private isBoundStatus(value: unknown): boolean {
+    return typeof value === 'string' && value.toLowerCase() === 'bound';
+  }
+
+  private hasBoundStatusDeep(input: unknown): boolean {
+    if (!input || typeof input !== 'object') return false;
+    const queue: unknown[] = [input];
+    while (queue.length > 0) {
+      const current = queue.shift();
+      if (!current || typeof current !== 'object') continue;
+      const record = current as Record<string, unknown>;
+      const candidates = [record.bindingStatus, record.binding_status, record.status];
+      if (candidates.some(candidate => this.isBoundStatus(candidate))) {
+        return true;
+      }
+      for (const value of Object.values(record)) {
+        if (value && typeof value === 'object') {
+          queue.push(value);
+        }
+      }
+    }
+    return false;
   }
 
   // Verify terms PDF for onboarding
@@ -920,6 +957,26 @@ export class IcaClient {
     throw new Error('Unexpected response status: ' + response.status);
   }
 
+  async identityDcrWithBinding(input: IdentityDcrBindingRequest): Promise<{ thid: string; location: string }> {
+    const protection = input.transportProtection || 'plain';
+    if (protection !== 'plain') {
+      throw new Error(
+        `transportProtection=${protection} is not yet supported by this SDK backend-auth path. ` +
+        'Use plain for now; signed/encrypted envelope generation will be introduced in a dedicated transport layer.'
+      );
+    }
+
+    return this.identityDcr(
+      input.clientId,
+      input.body || {},
+      {
+        bearerToken: input.bearerToken,
+        thid: input.thid,
+        meta: this.buildDcrMetaFromBinding(input)
+      }
+    );
+  }
+
   async pollIdentityDcrResponse(thid: string, bearerToken: string): Promise<IcaBackendAuthResponse> {
     return this.pollAsyncDidcommResponse(
       `/ica/cds-${this.jurisdiction}/v1/${this.config.sector}/identity/auth/_dcr-response?thid=${thid}`,
@@ -1033,16 +1090,57 @@ export class IcaClient {
       || (codeChallengeMethod === 'S256'
         ? await this.computePkceS256Challenge(request.codeVerifier)
         : request.codeVerifier);
+    const dcrMode = request.dcrMode || 'force';
+    let dcr: IcaBackendAuthResponse;
+    let shouldRunDcr = dcrMode === 'force';
 
-    const dcrSubmit = await this.identityDcr(
-      request.clientId,
-      request.dcrBody || {},
-      {
-        bearerToken: request.bearerToken,
-        meta: request.meta
+    if (dcrMode === 'skip') {
+      shouldRunDcr = false;
+    } else if (dcrMode === 'auto') {
+      if (request.knownBindingStatus === 'bound') {
+        shouldRunDcr = false;
+      } else if (request.knownBindingStatus === 'pending_dcr') {
+        shouldRunDcr = true;
+      } else {
+        const searchSubmit = await this.searchApiKeys(
+          request.apiKeySearchRequest || {},
+          request.bearerToken
+        );
+        const searchResponse = await this.pollApiKeyActionResponse(
+          searchSubmit.thid,
+          request.bearerToken,
+          '_search'
+        );
+        shouldRunDcr = !this.hasBoundStatusDeep(searchResponse);
       }
-    );
-    const dcr = await this.pollIdentityDcrResponse(dcrSubmit.thid, request.bearerToken);
+    }
+
+    if (shouldRunDcr) {
+      const dcrSubmit = await this.identityDcr(
+        request.clientId,
+        request.dcrBody || {},
+        {
+          bearerToken: request.bearerToken,
+          meta: request.meta
+        }
+      );
+      dcr = await this.pollIdentityDcrResponse(dcrSubmit.thid, request.bearerToken);
+    } else {
+      dcr = {
+        body: {
+          type: 'batch-response',
+          data: [
+            {
+              resource: {
+                status: 'bound',
+                action: 'dcr-skipped',
+                reason: 'binding-already-bound'
+              }
+            }
+          ]
+        }
+      };
+    }
 
     const codeSubmit = await this.identityCode(
       {
