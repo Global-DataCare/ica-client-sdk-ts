@@ -13,7 +13,7 @@ El alcance cubre:
 1. `ICA` (identidad y cumplimiento de onboarding).
 2. `GW` (operación de mensajería y gestión clínica/organizativa).
 3. `DataConversion` (normalización y producción de gemelos digitales).
-4. SDKs de integración (Node/Python/backend y frontend).
+4. Bibliotecas de integración (Node/Python/backend y frontend).
 
 ## 2. Separación de responsabilidades
 
@@ -44,20 +44,20 @@ DataConversion es la capa de transformación y publicación técnica. Sus funcio
 3. Publicar datasets/colecciones derivados.
 4. Alimentar gemelos digitales.
 
-## 2.4 SDKs (integración)
+## 2.4 Bibliotecas de integración
 
-Los SDKs no sustituyen APIs. Su función es:
+Las bibliotecas de integración no sustituyen las APIs. Su función es:
 
 1. Encapsular autenticación/autorización técnica.
-2. Estandarizar `submit + poll` asíncrono por `thid`.
+2. Estandarizar el patrón asíncrono de "envío inicial + consulta posterior de estado" usando un identificador del hilo de mensajes entre cliente de software y servicio API (`thid`).
 3. Reducir errores de integración y asegurar trazabilidad.
 
 ## 3. Modelo de identidad y acceso
 
 ## 3.1 Fase humana (controller/representante)
 
-1. El controller se autentica con un IdP confiable (por ejemplo Google u otro OIDC).
-2. Se obtiene `id_token`.
+1. El controller se autentica con un proveedor de identidad confiable (por ejemplo Google u otro OIDC).
+2. Se obtiene una credencial de identidad (`id_token`).
 3. Se ejecuta el intercambio en `/_exchange` para contexto autorizado en el ecosistema.
 4. El controller puede:
 - crear API keys para backend, o
@@ -67,8 +67,8 @@ Los SDKs no sustituyen APIs. Su función es:
 
 1. El cliente técnico utiliza `client_id` (API key o invitation code según flujo).
 2. Ejecuta DCR (`/_dcr`) para vincular identidad técnica con clave pública.
-3. Ejecuta emisión de token granular para endpoint concreto (flujo del perfil habilitado).
-4. Invoca endpoint de negocio con `Authorization: Bearer`.
+3. Solicita una credencial de acceso granular para un endpoint concreto (según el perfil de seguridad habilitado).
+4. Invoca endpoint de negocio con credencial de acceso tipo Bearer en la cabecera de autorización.
 
 ## 3.3 Regla de diseño de endpoints
 
@@ -93,7 +93,7 @@ Secuencia:
 Características:
 
 1. Flujo asíncrono `submit/poll`.
-2. `client_id` técnico obligatorio por contrato.
+2. `client_id` técnico obligatorio por especificación.
 3. DCR es vínculo técnico, no validación humana.
 
 ## 4.2 Perfil estándar SMART Backend Services (OAuth2)
@@ -113,24 +113,25 @@ Características:
 
 Ambos perfiles pueden coexistir, pero no deben mezclarse en la misma transacción.
 
-## 5. FHIR, IPS, Composition y gemelos digitales
+## 5. FHIR, resumen interoperable e índice de secciones del gemelo digital
 
 ## 5.1 SMART on FHIR
 
 Se usa para autorización de acceso a recursos FHIR con permisos granulares.
-El token debe estar acotado por:
+La credencial de acceso debe estar acotada por:
 
 1. endpoint/acción,
 2. ámbito clínico,
 3. política del tenant.
 
-## 5.2 FHIR IPS y Composition
+## 5.2 Resumen interoperable (IPS) e índice de secciones (Composition)
 
 En este marco:
 
-1. `Composition` actúa como índice funcional del gemelo digital (secciones y referencias).
+1. `Composition` actúa como índice funcional del gemelo digital (secciones y referencias a documentos/recursos).
 2. Cada sección puede referenciar documentos/recursos en diferentes data providers.
-3. IPS se interpreta como vista clínica interoperable sobre el índice y sus referencias.
+3. `IPS` se interpreta como resumen interoperable que consume ese índice.
+4. Este patrón de "índice + referencias" es aplicable fuera del sector salud cuando existe un sujeto y múltiples fuentes documentales.
 
 ## 5.3 Datasets DCAT3 y perfiles FHIR
 
@@ -162,13 +163,13 @@ Control recomendado:
 
 1. resolver la clave pública activa desde DID Document/JWKS,
 2. verificar que `kid` corresponde al thumbprint esperado (RFC 7638) según política,
-3. rechazar credenciales o tokens con `kid` no reconocido, revocado o fuera de política.
+3. rechazar credenciales o credenciales de acceso con `kid` no reconocido, revocado o fuera de política.
 
 ## 6.3 Resultado esperado
 
 Solo tras estas validaciones se permite:
 
-1. emisión/aceptación de token granular,
+1. emisión/aceptación de credencial de acceso granular,
 2. acceso a endpoints operativos,
 3. consumo de datasets clínicos.
 
@@ -178,19 +179,19 @@ Solo tras estas validaciones se permite:
 
 1. ICA separado funcionalmente de GW/DataConversion.
 2. Proceso humano (controller) separado del proceso técnico (wallet backend/app).
-3. Evidencia de onboarding y trust status trazable por tenant.
+3. Evidencia de onboarding y estado de confianza trazable por tenant.
 
 ## 7.2 Acceso técnico y criptografía
 
 1. DCR con vínculo `client_id` + clave pública técnica.
-2. Emisión de bearer con permisos granulares por endpoint/acción.
+2. Emisión de credencial de acceso Bearer con permisos granulares por endpoint/acción.
 3. Control de rotación/revocación de claves y credenciales.
 4. Verificación de `kid`/thumbprint y estado de confianza en Clearing House.
 
 ## 7.3 Interoperabilidad de datos
 
-1. Smart-on-FHIR para acceso autorizado.
-2. IPS/Composition para indexación y navegación clínica interoperable.
+1. SMART on FHIR para acceso autorizado.
+2. Uso de resumen interoperable (IPS) e índice de secciones (Composition) para indexación y navegación clínica interoperable.
 3. DCAT3 con datasets por perfil funcional, no solo por tipo base.
 
 ## 8. Modelo de integración para equipos de desarrollo
@@ -199,26 +200,26 @@ Solo tras estas validaciones se permite:
 
 1. Configuración de endpoints y credenciales.
 2. Custodia de claves (wallet/KMS/HSM).
-3. Selección del perfil de auth (`identity-exchange.v1` o SMART backend estándar).
+3. Selección del perfil de autenticación (`identity-exchange.v1` o SMART backend estándar).
 4. Política de reintentos, logging y auditoría.
 
-## 8.2 Qué aporta el SDK
+## 8.2 Qué aporta la biblioteca de integración
 
-1. Contratos tipados.
-2. Orquestación de flujo.
-3. Manejo de `thid`, `Location`, `Retry-After`.
-4. Adaptadores para distintos runtimes.
+1. Estructuras de entrada/salida claras para reducir errores.
+2. Gestión secuencial del proceso de autenticación y acceso.
+3. Gestión del identificador del hilo de mensajes (`thid`), de la URL de consulta de estado devuelta por el servidor (cabecera HTTP `Location`) y del tiempo mínimo de espera recomendado antes de volver a consultar estado (cabecera HTTP `Retry-After`).
+4. Conectores para distintos entornos de ejecución.
 
 ## 8.3 Reglas de implementación
 
-1. No mezclar payload de negocio con lógica criptográfica de envelope.
+1. No mezclar el contenido de negocio con la lógica criptográfica de firma/cifrado del sobre de transporte.
 2. Mantener distinción explícita entre:
-- identidad humana (id_token / exchange),
-- identidad técnica (DCR / PoP / client credentials).
+- identidad humana (credencial de identidad + intercambio de identidad),
+- identidad técnica (DCR + prueba de posesión de clave + client credentials).
 3. Validar siempre estado de confianza antes de habilitar operación sensible.
 
 ## 9. Prompt reutilizable (ES, versión formal)
 
 Usa este prompt para generar documentación equivalente:
 
-"Redacta un documento técnico-formal para un ecosistema de data space sanitario con tres capas: ICA (identidad/compliance), GW (operación) y DataConversion (normalización/gemelos digitales). Debe servir a dirección, auditoría y desarrollo. Incluye: (1) separación de responsabilidades API vs SDK, (2) flujo humano con id_token y `_exchange`, (3) flujo técnico con DCR usando `client_id` (API key/invitation code) y emisión de bearer granular por endpoint/acción, (4) coexistencia de perfil custom `identity-exchange.v1` y SMART Backend Services (`client_credentials + private_key_jwt`), (5) rol de FHIR IPS y Composition como índice del gemelo digital, (6) publicación/catalogación DCAT3 por perfil funcional de recurso, y (7) controles Gaia-X/Clearing House incluyendo validación de vigencia, revocación y `kid`/thumbprint RFC 7638 de Organization/PractitionerRole."
+"Redacta un documento técnico-formal para un ecosistema de data space sanitario con tres capas: ICA (identidad/compliance), GW (operación) y DataConversion (normalización/gemelos digitales). Debe servir a dirección, auditoría y desarrollo. Incluye: (1) separación de responsabilidades API vs biblioteca de integración, (2) flujo humano con credencial de identidad (`id_token`) y `_exchange`, (3) flujo técnico con DCR usando `client_id` (API key/invitation code) y emisión de credencial de acceso granular por endpoint/acción, (4) coexistencia de perfil custom `identity-exchange.v1` y SMART Backend Services (`client_credentials + private_key_jwt`), (5) rol de FHIR IPS y Composition como índice del gemelo digital, (6) publicación/catalogación DCAT3 por perfil funcional de recurso, y (7) controles Gaia-X/Clearing House incluyendo validación de vigencia, revocación y `kid`/thumbprint RFC 7638 de Organization/PractitionerRole."
