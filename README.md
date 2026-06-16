@@ -222,6 +222,48 @@ client.includeVpTokenInMessage(message);
 client.includeFileInMessage(message, fileBytes, 'application/pdf', 'file-id');
 ```
 
+## BFF demo fallback for representative email
+
+If the BFF wants ICA to include representative `credentialSubject.sameAs` in
+the returned VC, and the signed PDF/certificate does not already carry that
+contact value, the BFF may send it explicitly during `verifyTerms(...)`.
+
+Important scope:
+
+- this fallback is only for `demo/local` ICA mode
+- production should prefer signed `person.email` in the PDF annex
+- ICA does not infer this email from the BFF login/session automatically
+
+Canonical input rules:
+
+- if the BFF has the raw email, send it as `legalRepresentativePayload.email`
+- if the BFF already has the canonical hashed alias, send it as
+  `legalRepresentativePayload.sameAs`
+- for email-based identity, canonical `sameAs` is `urn:multibase:z...`, not
+  `mailto:...`
+
+Example:
+
+```ts
+await client.verifyTerms(pdfBytesOrLink, {
+  mediaType: 'application/pdf',
+  legalRepresentativePayload: {
+    email: 'controller@example.org'
+  }
+});
+```
+
+Equivalent explicit `sameAs` example:
+
+```ts
+await client.verifyTerms(pdfBytesOrLink, {
+  mediaType: 'application/pdf',
+  legalRepresentativePayload: {
+    sameAs: 'urn:multibase:zControllerHash'
+  }
+});
+```
+
 ## Current Rules
 
 - `_verify` is still the onboarding verification step; it is not the place to add new organization keys after onboarding.
