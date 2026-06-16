@@ -233,6 +233,10 @@ Important scope:
 - this fallback is only for `demo/local` ICA mode
 - production should prefer signed `person.email` in the PDF annex
 - ICA does not infer this email from the BFF login/session automatically
+- representative proof is two-dimensional:
+  - `credentialSubject.sameAs` for public identity continuity
+  - `credentialSubject.hasCredential.material` for controller signing-key continuity
+- production-grade VCs should ideally carry both dimensions
 
 Canonical input rules:
 
@@ -241,6 +245,13 @@ Canonical input rules:
   `legalRepresentativePayload.sameAs`
 - for email-based identity, canonical `sameAs` is `urn:multibase:z...`, not
   `mailto:...`
+
+Step by step:
+
+1. Prefer putting `person.email` in the signed PDF annex so ICA can derive the representative `sameAs` from signed evidence.
+2. If demo/local onboarding does not have that email in the PDF or certificate, send `legalRepresentativePayload.email` during `verifyTerms(...)`.
+3. If the BFF already computed the canonical hash, send `legalRepresentativePayload.sameAs` instead.
+4. Expect production-grade ICA responses to carry both `credentialSubject.sameAs` and `credentialSubject.hasCredential.material`.
 
 Example:
 

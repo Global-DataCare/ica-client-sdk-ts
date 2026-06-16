@@ -124,6 +124,9 @@ function createVerifyResponseExample(): IcaVerifyTermsResponse {
               identifier: 'IDCES-99999999R',
               nationality: 'ES',
               sameAs: 'urn:multibase:zControllerHash',
+              hasCredential: {
+                material: 'urn:ietf:params:oauth:jwk-thumbprint:sha-256:controller-thumbprint'
+              },
               alternateName: 'controller-es384-001',
               additionalType: 'ES384',
               memberOf: {
@@ -874,6 +877,8 @@ describe('IcaClient', () => {
 
     expect(credentials.organizationCredential?.credentialSubject?.legalName).toBe('Example Data Provider SL');
     expect(credentials.legalRepresentativeCredential?.credentialSubject?.sameAs).toBe('urn:multibase:zControllerHash');
+    expect(credentials.legalRepresentativeCredential?.credentialSubject?.hasCredential?.material)
+      .toBe('urn:ietf:params:oauth:jwk-thumbprint:sha-256:controller-thumbprint');
     expect(credentials.allCredentials).toHaveLength(2);
     expect(client.getOrganizationInfoFromVerifyResponse(response)?.taxID).toBe('VATES-B00000000');
     expect(client.getLegalRepresentativeInfoFromVerifyResponse(response)?.givenName).toBe('Alex');

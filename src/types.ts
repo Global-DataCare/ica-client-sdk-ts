@@ -209,9 +209,29 @@ export interface IcaLegalRepresentativeCredentialSubject {
   familyName?: string;
   identifier?: string;
   nationality?: string;
+  /**
+   * Public identity continuity alias of the representative/controller.
+   *
+   * Typical production shape for email-based identity:
+   * - `urn:multibase:z...`
+   *
+   * This field is complementary to `hasCredential.material`, which expresses
+   * continuity of the controller signing/binding key.
+   */
   sameAs?: string;
   alternateName?: string;
   additionalType?: string;
+  /**
+   * Signing/binding continuity of the controller key associated with the
+   * representative.
+   *
+   * Preferred canonical shape:
+   * - `urn:ietf:params:oauth:jwk-thumbprint:sha-256:<base64url>`
+   *
+   * This field is complementary to `sameAs`, which expresses public identity
+   * continuity such as email-derived aliases.
+   */
+  hasCredential?: Record<string, unknown>;
   hasOccupation?: Record<string, unknown>;
   memberOf?: IcaLegalRepresentativeMemberOf;
   [key: string]: unknown;
