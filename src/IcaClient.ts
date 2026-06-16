@@ -8,6 +8,7 @@ import axios, { AxiosInstance } from 'axios';
 import { prepareDidCommRequest, includeVpTokenInMessage, includeFileInMessage, getThidFromMessage, getDataResults } from 'gdc-common-utils-ts/utils/didcomm';
 import {
   ApiKeyActionRequest,
+  ApiKeyAuthorizationRule,
   BackendAuthRequestOptions,
   CreateOrgDidDocumentRequest,
   ControllerExchangeRequestBody,
@@ -864,6 +865,25 @@ export class IcaClient {
       return { thid, location: response.headers.location };
     }
     throw new Error('Unexpected response status: ' + response.status);
+  }
+
+  // Atomic authorization helper:
+  // one rule entry = one consent-like authorization record = one ODRL attachment/policy.
+  async createApiKeyRules(
+    rules: ApiKeyAuthorizationRule[],
+    bearerToken: string,
+    thid?: string
+  ): Promise<{ thid: string; location: string }> {
+    const normalizedRules = (rules || []).map((rule) => ({
+      resource: {
+        agent: { email: String(rule.agentEmail || '').trim() },
+        scope: [...(rule.scopes || [])],
+        ...(rule.target ? { target: rule.target } : {}),
+        ...(rule.odrlPolicy ? { instrument: rule.odrlPolicy } : {}),
+        ...(rule.expiresInSeconds ? { expires_in_seconds: rule.expiresInSeconds } : {}),
+      }
+    }));
+    return this.createApiKey({ thid, data: normalizedRules }, bearerToken);
   }
 
   async disableApiKey(

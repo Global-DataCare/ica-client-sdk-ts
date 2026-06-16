@@ -235,6 +235,32 @@ describe('IcaClient', () => {
     });
   });
 
+  it('should forward legalRepresentativePayload email and sameAs during verifyTerms', async () => {
+    mockedAxios.request?.mockResolvedValueOnce({
+      status: 202,
+      headers: { location: '/dummy', 'retry-after': '1' }
+    });
+
+    await client.verifyTerms('https://example.com/pdf.pdf', {
+      legalRepresentativePayload: {
+        givenName: 'Jane',
+        familyName: 'Doe',
+        identifier: 'IDCES-12345678A',
+        email: 'jane.doe@example.org',
+        sameAs: 'urn:multibase:zControllerHash'
+      }
+    });
+
+    const requestPayload: any = mockedAxios.request.mock.calls.at(-1)?.[0]?.data;
+    expect(requestPayload?.body?.data?.[0]?.resource?.legalRepresentative).toEqual({
+      givenName: 'Jane',
+      familyName: 'Doe',
+      identifier: 'IDCES-12345678A',
+      email: 'jane.doe@example.org',
+      sameAs: 'urn:multibase:zControllerHash'
+    });
+  });
+
   it('should populate verify meta.jws.protected from setControllerMessageSigningPublicKey', async () => {
     mockedAxios.request?.mockResolvedValueOnce({
       status: 202,
@@ -654,6 +680,40 @@ describe('IcaClient', () => {
     const submitCall = mockedAxios.request.mock.calls[0]?.[0];
     expect(submitCall?.headers?.Authorization).toBe('Bearer controller-token');
     expect(submitCall?.headers?.['Content-Type']).toBe('application/json');
+  });
+
+  it('should submit atomic API key rules with ODRL policy helper', async () => {
+    mockedAxios.request?.mockResolvedValueOnce({
+      status: 202,
+      headers: { location: '/create-response', 'retry-after': '1' }
+    });
+
+    const submit = await client.createApiKeyRules(
+      [
+        {
+          agentEmail: 'backend@example.org',
+          scopes: ['ica.backend.read'],
+          target: 'animal-care/backend',
+          odrlPolicy: {
+            '@context': 'http://www.w3.org/ns/odrl.jsonld',
+            '@type': 'Agreement',
+            permission: [{ action: 'read' }]
+          },
+          expiresInSeconds: 900
+        }
+      ],
+      'controller-token',
+      'thid-api-key-rules-001'
+    );
+
+    expect(submit.location).toBe('/create-response');
+    const submitPayload: any = mockedAxios.request.mock.calls[0]?.[0]?.data;
+    expect(submitPayload?.thid).toBe('thid-api-key-rules-001');
+    expect(submitPayload?.data?.[0]?.resource?.agent?.email).toBe('backend@example.org');
+    expect(submitPayload?.data?.[0]?.resource?.scope).toEqual(['ica.backend.read']);
+    expect(submitPayload?.data?.[0]?.resource?.target).toBe('animal-care/backend');
+    expect(submitPayload?.data?.[0]?.resource?.instrument?.['@type']).toBe('Agreement');
+    expect(submitPayload?.data?.[0]?.resource?.expires_in_seconds).toBe(900);
   });
 
   it('should submit identity DCR with meta.jws and top-level client_id', async () => {

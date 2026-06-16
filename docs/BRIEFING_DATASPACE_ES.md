@@ -38,11 +38,11 @@ DataConversion se encarga de:
 3. generar y mantener gemelos digitales por organización alojada,
 4. publicar conjuntos de datos catalogables.
 
-## 2.4 Biblioteca de integración (Node/Python/frontend)
+## 2.4 Biblioteca de integración (SDK Node/Python/frontend)
 
-La biblioteca de integración no reemplaza la API. Su papel es:
+El papel de la biblioteca de integración es:
 
-1. simplificar llamadas seguras a los servicios,
+1. simplificar llamadas seguras a los servicios API,
 2. gestionar el proceso "enviar petición y consultar resultado",
 3. reducir errores de integración y mejorar trazabilidad.
 
@@ -59,10 +59,45 @@ La biblioteca de integración no reemplaza la API. Su papel es:
 
 1. El representante entra con su proveedor de identidad habitual (por ejemplo Google, eID u otro).
 2. El sistema obtiene una credencial de identidad de esa persona.
-3. En ICA y DataConversion se ejecuta un intercambio de identidad administrativa (`_exchange`) para autorizar acciones de administración del controller.
+3. En ICA y DataConversion se puede ejecutar un intercambio de identidad administrativa (`_exchange`) para autorizar acciones de administración del `service-controller` o del `tenant-controller`, según el endpoint.
 4. El representante crea:
 - una API key para un backend, o
 - un código de invitación para un profesional/app.
+
+Aclaración crítica de alcance (evitar ambigüedad):
+
+1. `service-controller` (nivel servicio):
+- administra el propio servicio (configuración/operación interna),
+- no debe usarse como vía general para autorizar acciones de organizaciones alojadas.
+
+2. `tenant-controller` (ámbito de organización alojada):
+- administra su organización concreta,
+- crea API keys/códigos para dispositivos y software de su organización,
+- su ámbito se identifica por `tenant-id` en la ruta y por su autorización asociada.
+
+3. `tenant-runtime-client` (backend/app/dispositivo):
+- consume endpoints de operación diaria con permisos técnicos,
+- no administra el servicio ni la gobernanza global del nodo.
+
+Política obligatoria al crear API key/código:
+- el `tenant-controller` define los permisos permitidos del dispositivo/cliente (scopes),
+- y, cuando aplique, restringe endpoints/acciones concretas,
+- además de estado y expiración del instrumento.
+- esta política aplica tanto a clientes confidenciales (backend) como no confidenciales.
+- la política debe poder auditarse como consentimiento técnico:
+  - `1 regla = 1 consentimiento técnico = 1 política ODRL`.
+  - cada regla se modela como entrada atómica independiente.
+
+## 3.2.1 Cómo se modela el consentimiento técnico de API key
+
+1. El `tenant-controller` no “entrega solo una clave”; otorga una autorización concreta a un dispositivo.
+2. Esa autorización queda registrada por reglas atómicas con:
+- `scope` (obligatorio),
+- `target` por endpoint/acción (recomendado),
+- `instrument` ODRL (recomendado),
+- vigencia y estado.
+3. Si se necesitan permisos distintos para varios endpoints, se crean varias reglas atómicas.
+4. Este modelo permite revocación y trazabilidad por regla, sin ambigüedad.
 
 ## 3.3 Vinculación técnica del cliente o instancia de software
 
@@ -79,27 +114,34 @@ La biblioteca de integración no reemplaza la API. Su papel es:
 ## 3.5 Regla explícita por servicio
 
 1. GW: no depende del `_exchange` humano de administración para operación diaria; usa credenciales de acceso técnicas por operación.
-2. ICA: puede usar `_exchange` humano para funciones de administración (controller).
-3. DataConversion: puede usar `_exchange` humano para funciones de administración (controller).
+2. ICA: puede usar `_exchange` humano para funciones de administración (`service-controller` y `tenant-controller`, según endpoint).
+3. DataConversion: puede usar `_exchange` humano para funciones de administración (`service-controller` y `tenant-controller`, según endpoint).
+
+
+Regla de despliegue recomendada para endpoints internos:
+
+1. usar `LOCAL_MANAGEMENT_SECTOR` (por ejemplo `host`) para rutas de gestión interna del `service-controller`,
+2. mantener las rutas de operación de organizaciones alojadas bajo `tenant-id` y su autorización correspondiente.
 
 ## 4. Formas de acceso: intercambio humano y caminos técnicos
 
-Hay tres piezas que deben distinguirse para no mezclar conceptos:
+Hay cuatro piezas que deben distinguirse para no mezclar conceptos:
 
 1. intercambio humano de administración,
 2. camino técnico propio del ecosistema,
 3. camino técnico estándar SMART backend.
+4. perfil excepcional para cliente no confidencial (solo donde esté explícitamente habilitado).
 
 ## 4.1 Intercambio humano de administración (`_exchange` en ICA/DataConversion)
 
 Quién lo usa:
 
-1. controller/admin (persona) para tareas de administración.
+1. `service-controller` o `tenant-controller` (persona), según alcance de la operación.
 
 Para qué sirve:
 
 1. obtener autorización administrativa tras autenticación humana,
-2. crear API keys o invitaciones,
+2. crear API keys o invitaciones para una organización concreta cuando el ámbito es tenant,
 3. operar endpoints administrativos de ICA/DataConversion.
 
 Qué no es:
@@ -151,6 +193,24 @@ Diferencia clave:
 
 1. este camino no usa `/_dcr/_code/_token/_exchange`.
 2. este camino aplica prueba de posesión de clave en la solicitud de credencial de acceso.
+
+## 4.4 Perfil excepcional no confidencial (`api-key-exception.v1`)
+
+Uso:
+
+1. caso excepcional de cliente no confidencial (por ejemplo, tarea de escritorio) para subida puntual en DataConversion.
+
+Reglas:
+
+1. solo se permite cuando el servicio lo habilita explícitamente por configuración,
+2. no sustituye al camino técnico canónico `identity-exchange.v1`,
+3. debe usar API key emitida por `tenant-controller` con permisos explícitos por scope/acción y trazabilidad de consentimiento técnico.
+
+Límite actual de soporte:
+
+1. ICA: no soporta este perfil en runtime.
+2. GW: no soporta este perfil en runtime.
+3. DataConversion: puede soportarlo como excepción explícita y auditada.
 
 ## 5. Historia de datos del sujeto (IPS + Composition) y gemelo digital
 
@@ -219,6 +279,8 @@ Además, se valida el ID normalizado de clave pública:
 6. `Location` (cabecera HTTP): URL de consulta de estado devuelta por el servidor.
 7. `Retry-After` (cabecera HTTP): tiempo mínimo recomendado antes de volver a consultar estado.
 8. `kid`: ID normalizado de la clave pública usada para verificar firmas.
+9. consentimiento técnico de API key: autorización granular otorgada por el `tenant-controller` a un dispositivo/cliente.
+10. `ODRL`: lenguaje de políticas para expresar restricciones y permisos de uso.
 
 ## 9. Criterios obligatorios para documentos derivados
 
@@ -232,3 +294,5 @@ Si este texto se usa como base para presentaciones o anexos, siempre debe conser
 6. autorización granular por operación de API,
 7. explicación de historia de datos del sujeto (índice + resumen + transformaciones),
 8. catalogación DCAT3 por perfil funcional.
+9. política de API key: permisos definidos por `tenant-controller` (scopes y, cuando aplique, endpoints/acciones), con vigencia/estado explícitos.
+10. límite de perfiles: `api-key-exception.v1` no se asume en ICA/GW; solo como excepción explícita donde se implemente.

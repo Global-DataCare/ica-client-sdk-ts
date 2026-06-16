@@ -45,7 +45,6 @@ VITE_ICA_BASE_URL=http://localhost:3310
 ```
 
 Initialize the SDK with that value:
-
 ```ts
 const client = new IcaClient({
   sector: Sector.HealthCare,
@@ -55,9 +54,6 @@ const client = new IcaClient({
   crypto: globalThis.crypto
 });
 ```
-
-`ICA_BASE_URL` from `.env.example` remains useful for Node/testing scenarios.
-
 ### SDK local default (Node/test/reference)
 
 The repository includes:
@@ -107,6 +103,26 @@ const { thid, location } = await client.verifyTerms(pdfBytesOrLink, {
   mediaType: 'application/pdf'
 });
 
+// If the signed PDF/certificate does not expose the representative email and
+// the BFF needs ICA to include representative credentialSubject.sameAs, the
+// BFF must send it explicitly during verifyTerms().
+//
+// Production/strict recommendation:
+// - put the value in the signed annex as `person.email`
+// - let ICA derive the canonical `credentialSubject.sameAs = urn:multibase:z...`
+//   from that plain email
+//
+// Demo/local fallback:
+// - send `legalRepresentativePayload.email` or `.sameAs`
+// - if you send `.sameAs` for an email-based identity, use the canonical
+//   `urn:multibase:z...` value, not `mailto:...`
+await client.verifyTerms(pdfBytesOrLink, {
+  mediaType: 'application/pdf',
+  legalRepresentativePayload: {
+    email: 'controller@example.org'
+  }
+});
+
 // The SDK sends FAPI-style request envelopes with:
 // - jti: request identifier
 // - thid: thread identifier
@@ -117,6 +133,13 @@ const { thid, location } = await client.verifyTerms(pdfBytesOrLink, {
 // The returned object follows the same shape as dataspace-ica-ts OpenAPI
 // for POST /terms/pdf/contract/_verify-response.
 const verifyResponse = await client.pollVerifyTermsResponse(thid);
+
+// Important:
+// - ICA does not infer this email from the BFF login/registration by itself
+// - if the BFF does not send it and the signed PDF/certificate does not carry
+//   it either, ICA has no representative email to map into the VC
+// - the payload fallback above is a demo/local convenience and should not
+//   replace signed `person.email` evidence in production
 
 // v2 bootstrap helpers:
 // - organization public/private JWK live outside resource on the organization entry
@@ -130,7 +153,6 @@ const { organizationVC, legalRepresentativeVC, allVcs } = client.getVcsFromRespo
 // Get the credential objects from verify-response body.data[].resource
 const organizationCredential = client.getOrganizationCredentialFromVerifyResponse(verifyResponse);
 const legalRepresentativeCredential = client.getLegalRepresentativeCredentialFromVerifyResponse(verifyResponse);
-
 // Get structured credentialSubject info using schema.org-style shapes
 const organizationInfo = client.getOrganizationInfoFromVerifyResponse(verifyResponse);
 const legalRepresentativeInfo = client.getLegalRepresentativeInfoFromVerifyResponse(verifyResponse);
@@ -141,21 +163,9 @@ console.log(organizationInfo?.address?.addressCountry);
 console.log(legalRepresentativeInfo?.givenName);
 console.log(legalRepresentativeInfo?.familyName);
 console.log(legalRepresentativeInfo?.identifier); // National ID
-
-// Get ICA DID document
-const icaDidDoc = await client.getIcaDidDocument();
-
-// Create org DID document from required fields.
-// Important:
 // - meta.jws.protected.jwk is the controller/message-signing key
 // - the organization credential-signing key is sent as an extra JWK attachment
 //   during verifyTerms() if setOrgCredentialSigningPublicKey() is configured
-// - if no organization key is provided, ICA can autogenerate ES384 and return
-//   publicKeyJwk/privateKeyJwk in _verify-response
-// - if _verify already stored a controller binding, _create must reuse it;
-//   an explicit controller.publicKeyJwk can only be sent if it matches
-// - if _verify already stored an organization key, _create cannot override it;
-//   an explicit organization.publicKeyJwk can only be sent if it matches
 // - if the organization key was ICA-generated in _verify (keySource=generated),
 //   _create must send organization.publicKeyJwk again as explicit confirmation
 
@@ -197,8 +207,6 @@ const { thid: createThid } = await client.createOrgDidDocument({
 });
 const createResponse = await client.pollCreateOrgDidDocumentResponse(createThid);
 
-// Or derive the organization DID input from the verified credentials
-// and rely on the key material returned by _verify
 const { thid: derivedThid } = await client.createOrgDidDocumentFromVcs({
   organizationVC: organizationCredential,
   legalRepresentativeVC: legalRepresentativeCredential,
@@ -207,15 +215,6 @@ const { thid: derivedThid } = await client.createOrgDidDocumentFromVcs({
 });
 const derivedCreateResponse = await client.pollCreateOrgDidDocumentResponse(derivedThid);
 
-// v2 onboarding binding:
-// setControllerMessageSigningPublicKey() populates meta.jws.protected.jwk automatically.
-// setOrgCredentialSigningPublicKey() adds an organization public JWK attachment automatically.
-await client.verifyTerms(pdfBytesOrLink, {
-  mediaType: 'application/pdf'
-});
-
-// For normal integrations, do not build meta.jws.protected.jwk manually.
-// Use setControllerMessageSigningPublicKey() and let the SDK populate it.
 
 // Prepare DIDComm message
 const message = client.prepareDidCommRequest('type', body, attachments);
@@ -314,29 +313,10 @@ For local manual testing today, the realistic flow is:
 
 The full organization offboarding cycle is:
 
-1. `_verify`
-2. `_create`
-3. `_remove`
-4. new `_verify`
-5. new `_create`
-6. new `_remove`
 
 Example:
 
-```ts
-client.setControllerMessageSigningPublicKey('ES384', 'controller-msg-es384-001', {
-  kty: 'EC',
-  crv: 'P-384',
-  x: '<x>',
   y: '<y>'
-});
-
-const removeJob = await client.removeOrganizationTerms({
-  organization: {
-    identifier: 'did:web:globaldatacare.es:animal-care:organization:taxid:VATES-B42215152',
-    taxID: 'VATES-B42215152'
-  },
-  reason: 'organization-requested-removal'
 });
 
 const removeResponse = await client.pollRemoveOrganizationTermsResponse(removeJob.thid);
@@ -366,25 +346,9 @@ type VerifyResponse = {
   attachments?: Array<{
     id?: string;
     format?: string;
-    media_type?: string;
-    filename?: string;
-    data?: {
-      json?: {
-        format?: string;
-        jwt?: string;
-      };
-    };
-  }>;
-  body?: {
     resourceType?: 'Bundle';
     type?: 'batch-response';
     total?: number;
-    data?: Array<{
-      type?: string;
-      publicKeyJwk?: Record<string, unknown>;
-      privateKeyJwk?: Record<string, unknown>;
-      keySource?: 'attachment' | 'generated';
-      response?: {
         status?: string;
       };
       resource?: {
@@ -396,33 +360,16 @@ type VerifyResponse = {
 };
 ```
 
-The SDK exposes helpers over that structure:
-
 - `getVcsFromResponse(response)`
-- `getCredentialsFromVerifyResponse(response)`
-- `getOrganizationCredentialFromVerifyResponse(response)`
 - `getLegalRepresentativeCredentialFromVerifyResponse(response)`
 - `getOrganizationInfoFromVerifyResponse(response)`
-- `getLegalRepresentativeInfoFromVerifyResponse(response)`
-
 Using the `dataspace-ica-ts` OpenAPI example, the main fields come from:
 
-- `response.body.data[0].resource.credentialSubject.legalName`
-- `response.body.data[0].resource.credentialSubject.taxID`
-- `response.body.data[1].resource.credentialSubject.givenName`
 - `response.body.data[1].resource.credentialSubject.familyName`
 - `response.body.data[1].resource.credentialSubject.identifier`
 
 ## Features
 
-- DIDComm messaging with attachments
-- VC/VP management (frontend handles signing)
-- PDF verification for onboarding
-- Extraction helpers for organization and legal representative credential data
-- DID document retrieval
-- Typed async responses aligned with `dataspace-ica-ts` OpenAPI examples
-- Polling for async responses
-- Shared utilities for preconversion SDK
 
 ## Testing
 
@@ -452,6 +399,7 @@ This SDK includes ICA backend-auth helpers for the custom async profile `identit
 
 - `controllerExchange(...)` + `pollControllerExchangeResponse(...)`
 - `createApiKey(...)`, `disableApiKey(...)`, `removeApiKey(...)`, `searchApiKeys(...)`
+- `createApiKeyRules(...)` (atomic policy helper: one rule entry per authorization rule)
 - `pollApiKeyActionResponse(thid, bearerToken, action)`
 - `identityDcr(...)`, `pollIdentityDcrResponse(...)`
 - `identityDcrWithBinding(...)` (parameter-first DCR helper)
@@ -466,14 +414,13 @@ Notes:
 - SMART Backend Services (`client_credentials + private_key_jwt`) is a separate OAuth profile.
 - `_dcr` in this section is backend technical identity binding (`client_id` + technical JWK). It is not the human controller VP/Clearing House flow.
 - For `identity-exchange.v1`, runtime `client_id` is still required by `_code/_token/_exchange`.
-
-### Transport/Protection Matrix
+- API key provisioning policy is atomic: each `data[].resource` is one authorization rule.
+  - `instrument` (ODRL policy object, recommended),
+  - optional expiry.
 
 How `meta.jws.protected` should be handled depends on transport profile:
 
 1. `didcomm-plain`:
-- no detached JWS/JWE envelope is present,
-- request may carry technical public key in `meta.jws.protected.jwk` (current SDK behavior for DCR path).
 
 2. `didcomm-signed`:
 - JWS protected header is produced by the signing layer,
@@ -560,3 +507,7 @@ After binding is `bound`, runtime token issuance uses `_code -> _token -> _excha
 - `dcrMode: "force"` (default): always run `_dcr`.
 - `dcrMode: "skip"`: skip `_dcr` explicitly.
 - `dcrMode: "auto"`: skip `_dcr` when known/observed binding is `bound`.
+
+## Roadmap and Briefing
+- `BRIEFING_DATASPACE_EN.md`
+- `TODO_ROADMAP.md`

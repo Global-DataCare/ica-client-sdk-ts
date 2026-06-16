@@ -40,6 +40,14 @@ Bootstrap variants:
 Runtime requirement:
 - For `identity-exchange.v1`, `client_id` is still required by `_code/_token/_exchange`.
 
+API key policy model (must stay explicit):
+- API key provisioning is atomic: each `data[].resource` is one authorization rule.
+- Required per rule: `scope`.
+- Recommended per rule: `target` (endpoint/action restriction) and `instrument` (ODRL JSON object).
+- Current profile boundary:
+  - ICA/GW do not support `api-key-exception.v1` runtime mode.
+  - DataConv may support it only as explicit gated profile.
+
 ## Transport Protection Semantics
 
 Agents must keep these semantics explicit in docs/code reviews:
@@ -93,7 +101,7 @@ Reference for exact sequence and contracts:
 ## Backend Auth Client Methods
 - `controllerExchange(...)`
 - `pollControllerExchangeResponse(thid)`
-- `createApiKey(...)`, `disableApiKey(...)`, `removeApiKey(...)`, `searchApiKeys(...)`
+- `createApiKey(...)`, `createApiKeyRules(...)`, `disableApiKey(...)`, `removeApiKey(...)`, `searchApiKeys(...)`
 - `pollApiKeyActionResponse(thid)`
 - `identityDcr(...)`, `pollIdentityDcrResponse(thid)`
 - `identityDcrWithBinding(...)` (parameter-first DCR)

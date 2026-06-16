@@ -108,6 +108,33 @@ export interface VerifyTermsLegalRepresentativePayload {
   givenName?: string;
   familyName?: string;
   identifier?: string;
+  /**
+   * Optional public controller alias forwarded to ICA during `_verify`.
+   *
+   * Contract note:
+   * - for email-based bindings, the canonical ICA value is the normalized
+   *   `urn:multibase:z...` produced from the plain email, not `mailto:...`
+   * - production/strict ICA flows should still source representative
+   *   `credentialSubject.sameAs` from the signed PDF annex (`person.email`) or
+   *   the signer certificate email
+   * - demo/local ICA flows may additionally accept this field from the payload
+   *   when the signed sources do not expose that contact value
+   */
+  sameAs?: string;
+  /**
+   * Optional representative email forwarded to ICA during `_verify`.
+   *
+   * Contract note:
+   * - this is not inferred from the BFF session or user registration
+   * - if the BFF wants ICA to include representative `credentialSubject.sameAs`
+   *   and the signed PDF/certificate does not already carry it, the BFF must
+   *   send it explicitly here
+   * - production/strict ICA flows should prefer `person.email` in the signed
+   *   PDF annex; demo/local ICA flows may use this payload fallback
+   * - this fallback should not be treated as a substitute for a signed
+   *   representative identity claim in production
+   */
+  email?: string;
 }
 
 export interface VerifyTermsOptions {
@@ -320,6 +347,14 @@ export interface ApiKeyCreateAction {
   target?: string;
   instrument?: Record<string, unknown>;
   expires_in_seconds?: number;
+}
+
+export interface ApiKeyAuthorizationRule {
+  agentEmail: string;
+  scopes: string[];
+  target?: string;
+  odrlPolicy?: Record<string, unknown>;
+  expiresInSeconds?: number;
 }
 
 export interface ApiKeySelector {
