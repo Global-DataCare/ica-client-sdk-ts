@@ -1,4 +1,4 @@
-// Copyright 2025 Antifraud Services Inc. under the Apache License, Version 2.0.
+// Copyright 2026 Antifraud Services Inc. under the Apache License, Version 2.0.
 // File: src/index.ts
 
 // ICA Client SDK Entry Point
@@ -8,9 +8,15 @@ export { DidCommMessage, DidCommAttachment } from 'gdc-common-utils-ts/utils/did
 export { VcManager } from './VcManager';
 export { VpManager } from './VpManager';
 export type {
+  ApiKeyActionRequest,
+  BackendAuthRequestOptions,
+  IcaConfiguredPublicKey,
+  IcaBackendAuthResponse,
   CreateOrgDidDocumentRequest,
+  ControllerExchangeRequestBody,
   IcaCreateOrgDidDocumentResponse,
   IcaCredential,
+  IcaCrypto,
   IcaDidCommAttachment,
   IcaDidCommResponse,
   IcaDidDocument,
@@ -19,7 +25,16 @@ export type {
   IcaLegalRepresentativeCredentialSubject,
   IcaOrganizationCredential,
   IcaOrganizationCredentialSubject,
-  IcaVerifyTermsResponse
+  IdentityCodeBody,
+  IdentityDcrBindingRequest,
+  IdentityDcrBody,
+  IdentityExchangeBody,
+  IdentityTokenBody,
+  TransportProtection,
+  RunBackendAuthFlowRequest,
+  RunBackendAuthFlowResult,
+  IcaVerifyTermsResponse,
+  VerifyTermsOptions
 } from './types';
 
 // Shared utilities from gdc-common-utils-ts
