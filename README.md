@@ -24,6 +24,28 @@ This SDK allows frontend developers using React or React Native to interact with
 npm install ica-client-sdk-ts
 ```
 
+## Shared Workspace
+
+Recommended local layout for the ICA repos and shared PDF fixtures:
+
+```text
+~/GITS/gdc-workspace/
+  dataspace-ica-ts/
+  ica-client-sdk-ts/
+  gdc-common-utils-ts/
+  examples/
+    <example-pdf-1>.pdf
+    <example-pdf-2>.pdf
+```
+
+Why this is recommended:
+
+- several docs, examples, and local tests across repos assume a shared `gdc-workspace`
+- real PDF fixtures are expected under `~/GITS/gdc-workspace/examples/`
+- keeping the repos side by side makes cross-repo changes and verification simpler
+
+If you use a different layout, update your local paths accordingly when running examples or fixture-based tests.
+
 ## Configuration
 
 ### How `baseUrl` is resolved
@@ -88,6 +110,13 @@ client.setControllerMessageSigningPublicKey('ES384', 'controller-msg-es384-001',
   y: '<msg-y>'
 });
 
+client.setControllerBindingPublicKey('ES384', 'controller-binding-es384-001', {
+  kty: 'EC',
+  crv: 'P-384',
+  x: '<controller-binding-x>',
+  y: '<controller-binding-y>'
+});
+
 client.setOrgCredentialSigningPublicKey('ES384', 'org-cred-es384-001', {
   kty: 'EC',
   crv: 'P-384',
@@ -120,6 +149,18 @@ await client.verifyTerms(pdfBytesOrLink, {
   mediaType: 'application/pdf',
   legalRepresentativePayload: {
     email: 'controller@example.org'
+  },
+  controllerPayload: {
+    publicKeyJwk: controllerBindingPublicKey
+  },
+  meta: {
+    jws: {
+      protected: {
+        alg: 'ES384',
+        kid: 'device-communication-es384-001',
+        jwk: deviceCommunicationPublicJwk
+      }
+    }
   }
 });
 
@@ -163,7 +204,8 @@ console.log(organizationInfo?.address?.addressCountry);
 console.log(legalRepresentativeInfo?.givenName);
 console.log(legalRepresentativeInfo?.familyName);
 console.log(legalRepresentativeInfo?.identifier); // National ID
-// - meta.jws.protected.jwk is the controller/message-signing key
+// - meta.jws.protected.jwk is the DIDComm communication key
+// - body.data[].resource.controller.publicKeyJwk is the controller business binding key
 // - the organization credential-signing key is sent as an extra JWK attachment
 //   during verifyTerms() if setOrgCredentialSigningPublicKey() is configured
 // - if the organization key was ICA-generated in _verify (keySource=generated),
@@ -279,14 +321,15 @@ await client.verifyTerms(pdfBytesOrLink, {
 
 - `_verify` is still the onboarding verification step; it is not the place to add new organization keys after onboarding.
 - `_create` is the current step that publishes the organization DID document.
-- Treat the onboarding/message-signing key separately from VC-signing keys.
+- Treat the DIDComm communication key separately from the controller business binding key and from VC-signing keys.
 - For organization VC signing, prefer `ES384` as the primary VC-signing key in `organization.publicKeyJwk`.
 - If Pontus-X compatibility is needed, publish `ES256K` as an additional key in `organization.jwks.keys[]`, not as the primary key.
 - The same key-model should be reused later for employee DID documents and employee keys.
 
 Recommended SDK usage:
 
-- `setControllerMessageSigningPublicKey(alg, kid, jwk)` for controller onboarding/message binding
+- `setControllerMessageSigningPublicKey(alg, kid, jwk)` for DIDComm communication protection
+- `setControllerBindingPublicKey(alg, kid, jwk)` for the controller business binding projected into `credentialSubject.hasCredential.material`
 - `setOrgCredentialSigningPublicKey(alg, kid, jwk)` to send the organization public JWK attachment in `_verify`
 - in `_create`, explicit `controller.publicKeyJwk` and `organization.publicKeyJwk` are still valid for v1 compatibility when no stored binding/bootstrap key exists yet
 - if `_verify` already stored the controller binding, an explicit `controller.publicKeyJwk` in `_create` must match it exactly
@@ -295,9 +338,12 @@ Recommended SDK usage:
 
 ## V2 Binding
 
-The v2 onboarding flow binds the controller message-signing key during `_verify` using `meta.jws.protected.jwk`.
+The v2 onboarding flow separates communication and controller binding during `_verify`:
 
-That key is for onboarding/message authorization. It is not automatically the same key that will sign VCs for SMART-on-FHIR, EUDI Wallet, or Pontus-X.
+- `meta.jws.protected.jwk`: DIDComm communication key of the device profile, confidential app, or BFF
+- `body.data[].resource.controller.publicKeyJwk`: controller business binding key projected into `credentialSubject.hasCredential.material`
+
+The communication key is for transport protection. It is not automatically the same key that will sign controller operations, VCs for SMART-on-FHIR, EUDI Wallet, or Pontus-X.
 
 The organization credential-signing key is separate:
 
@@ -315,7 +361,8 @@ Important security rule:
 
 Today, the SDK can already transport both:
 
-- `meta.jws.protected.jwk` for the controller key
+- `meta.jws.protected.jwk` for the communication key
+- `body.data[].resource.controller.publicKeyJwk` for the controller binding key
 - the organization public JWK attachment for the organization credential key
 
 ## Organization Offboarding
@@ -339,7 +386,8 @@ Intended semantics:
 
 Authorization model:
 
-- didactic mode: controller key may still travel as `meta.jws.protected.jwk`
+- preferred input: `controller.publicKeyJwk` in request body
+- didactic legacy mode: controller key may still travel as `meta.jws.protected.jwk`
 - hardened mode: request should be real `didcomm-signed`, optionally wrapped in `didcomm-encrypted`
 
 Important:
