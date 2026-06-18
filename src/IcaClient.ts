@@ -71,6 +71,7 @@ export class IcaClient {
   private retryTimes: number;
   private retryDelayMs: number;
   private messageSigningPublicKey?: IcaConfiguredPublicKey;
+  private controllerBindingPublicKey?: IcaConfiguredPublicKey;
   private credentialSigningPublicKey?: IcaConfiguredPublicKey;
 
   constructor(config: IcaClientConfig) {
@@ -105,8 +106,31 @@ export class IcaClient {
     };
   }
 
+  /**
+   * Sets the controller operation-signing public key that should travel inside
+   * `_verify` business payload as `body.data[].resource.controller.publicKeyJwk`.
+   *
+   * Separation of concerns:
+   * - this key represents the real controller/business actor
+   * - it is distinct from the DIDComm communication key configured via
+   *   `setControllerMessageSigningPublicKey(...)`
+   * - ICA should project this key into
+   *   `credentialSubject.hasCredential.material`
+   */
+  setControllerBindingPublicKey(alg: string, kid: string, jwk: IcaJwk): void {
+    this.controllerBindingPublicKey = {
+      alg,
+      kid,
+      jwk: { ...jwk }
+    };
+  }
+
   clearControllerMessageSigningPublicKey(): void {
     this.messageSigningPublicKey = undefined;
+  }
+
+  clearControllerBindingPublicKey(): void {
+    this.controllerBindingPublicKey = undefined;
   }
 
   setOrgCredentialSigningPublicKey(alg: string, kid: string, jwk: IcaJwk): void {
@@ -317,7 +341,16 @@ export class IcaClient {
     return false;
   }
 
-  // Verify terms PDF for onboarding
+  /**
+   * Verifies onboarding terms PDF through ICA.
+   *
+   * Key separation during `_verify`:
+   * - DIDComm communication protection lives in `meta.jws` / `meta.jwe`
+   * - controller business binding lives in
+   *   `body.data[].resource.controller.publicKeyJwk`
+   * - organization credential key bootstrap lives in the extra
+   *   `application/jwk+json` attachment when provided
+   */
   async verifyTerms(
     pdfLinkOrBytes: string | Uint8Array,
     options: VerifyTermsOptions = {}
@@ -352,7 +385,10 @@ export class IcaClient {
     }
 
     const body: Record<string, any> = options.body || {};
-    if (options.organizationPayload || options.legalRepresentativePayload) {
+    const controllerBindingPublicKeyJwk = options.controllerPayload?.publicKeyJwk
+      || this.buildConfiguredPublicJwk(this.controllerBindingPublicKey);
+
+    if (options.organizationPayload || options.legalRepresentativePayload || controllerBindingPublicKeyJwk) {
       if (!body.data) {
         body.data = [{ resource: {} }];
       } else if (Array.isArray(body.data) && body.data.length > 0 && !body.data[0].resource) {
@@ -367,6 +403,12 @@ export class IcaClient {
       }
       if (options.legalRepresentativePayload) {
         resource.legalRepresentative = options.legalRepresentativePayload;
+      }
+      if (controllerBindingPublicKeyJwk) {
+        resource.controller = {
+          ...(resource.controller || {}),
+          publicKeyJwk: controllerBindingPublicKeyJwk
+        };
       }
     }
 

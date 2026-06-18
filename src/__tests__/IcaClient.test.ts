@@ -290,6 +290,63 @@ describe('IcaClient', () => {
         y: 'msg-y'
       }
     });
+    expect(requestPayload?.body?.data).toBeUndefined();
+  });
+
+  it('should place controller binding key into body.data[].resource.controller.publicKeyJwk during verifyTerms', async () => {
+    mockedAxios.request?.mockResolvedValueOnce({
+      status: 202,
+      headers: { location: '/dummy', 'retry-after': '1' }
+    });
+
+    client.setControllerBindingPublicKey('ES384', 'controller-binding-es384-001', {
+      kty: 'EC',
+      crv: 'P-384',
+      x: 'binding-x',
+      y: 'binding-y'
+    });
+
+    await client.verifyTerms('https://example.com/pdf.pdf');
+
+    const requestPayload: any = mockedAxios.request.mock.calls.at(-1)?.[0]?.data;
+    expect(requestPayload?.body?.data?.[0]?.resource?.controller).toEqual({
+      publicKeyJwk: {
+        kty: 'EC',
+        crv: 'P-384',
+        x: 'binding-x',
+        y: 'binding-y',
+        alg: 'ES384',
+        kid: 'controller-binding-es384-001'
+      }
+    });
+    expect(requestPayload?.meta).toBeUndefined();
+  });
+
+  it('should keep DIDComm communication key and controller binding key separate during verifyTerms', async () => {
+    mockedAxios.request?.mockResolvedValueOnce({
+      status: 202,
+      headers: { location: '/dummy', 'retry-after': '1' }
+    });
+
+    client.setControllerMessageSigningPublicKey('ES384', 'device-comm-es384-001', {
+      kty: 'EC',
+      crv: 'P-384',
+      x: 'device-x',
+      y: 'device-y'
+    });
+    client.setControllerBindingPublicKey('ES384', 'controller-binding-es384-001', {
+      kty: 'EC',
+      crv: 'P-384',
+      x: 'binding-x',
+      y: 'binding-y'
+    });
+
+    await client.verifyTerms('https://example.com/pdf.pdf');
+
+    const requestPayload: any = mockedAxios.request.mock.calls.at(-1)?.[0]?.data;
+    expect(requestPayload?.meta?.jws?.protected?.kid).toBe('device-comm-es384-001');
+    expect(requestPayload?.body?.data?.[0]?.resource?.controller?.publicKeyJwk?.kid)
+      .toBe('controller-binding-es384-001');
   });
 
   it('should attach organization public JWK in verifyTerms when setOrgCredentialSigningPublicKey is configured', async () => {

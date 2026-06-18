@@ -4,15 +4,11 @@ export default {
   testEnvironment: 'node',
   extensionsToTreatAsEsm: ['.ts'],
   setupFilesAfterEnv: ['<rootDir>/src/__tests__/jest.setup.ts'],
-  testPathIgnorePatterns: [
-    '<rootDir>/src/__tests__/controllerBinding.test.ts',
-    '<rootDir>/src/__tests__/IcaClient.live.test.ts',
-  ],
   globals: {
     'ts-jest': {
       tsconfig: 'tsconfig.json',
-      useESM: true
-    }
+      useESM: true,
+    },
   },
   transformIgnorePatterns: ['/node_modules/(?!gdc-common-utils-ts)'],
 };

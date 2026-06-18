@@ -137,12 +137,50 @@ export interface VerifyTermsLegalRepresentativePayload {
   email?: string;
 }
 
+/**
+ * Controller operation-signing / binding key carried inside the business
+ * payload of `_verify`.
+ *
+ * Separation of concerns:
+ * - this key represents the real controller whose continuity should be
+ *   reflected in `credentialSubject.hasCredential.material`
+ * - this key is distinct from any DIDComm communication key carried in
+ *   `meta.jws` / `meta.jwe`
+ * - device/profile/BFF communication keys may rotate without changing the
+ *   controller binding represented by the VC
+ */
+export interface VerifyTermsControllerPayload {
+  /**
+   * Public controller operation-signing key that ICA should bind into the
+   * representative VC.
+   *
+   * Intended ICA effect:
+   * - source for `credentialSubject.hasCredential.material`
+   *
+   * Non-responsibilities:
+   * - not a transport-envelope communication key
+   * - not a replacement for `meta.jws` / `meta.jwe`
+   */
+  publicKeyJwk?: IcaJwk;
+}
+
 export interface VerifyTermsOptions {
   mediaType?: string;
   attachmentId?: string;
   organizationPayload?: VerifyTermsOrganizationPayload;
   legalRepresentativePayload?: VerifyTermsLegalRepresentativePayload;
+  controllerPayload?: VerifyTermsControllerPayload;
   body?: Record<string, unknown>;
+  /**
+   * Optional DIDComm envelope metadata.
+   *
+   * Separation of concerns:
+   * - `meta.jws` / `meta.jwe` protect the communication channel
+   * - these keys identify the runtime profile, device, confidential app, or
+   *   BFF that is talking to ICA
+   * - these keys must not be treated as the controller operation-signing key
+   *   unless a legacy ICA deployment explicitly still does so
+   */
   meta?: IcaDidCommMessageMeta;
   organizationPublicKeyJwk?: IcaJwk;
 }
