@@ -1,6 +1,6 @@
 {
   "name": "ica-client-sdk-ts",
-  "version": "2.0.5",
+  "version": "2.0.6",
   "description": "ICA Client SDK for TypeScript, supporting React and React Native, for interacting with dataspace-ica-ts services via DIDComm.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -37,7 +37,7 @@
   },
   "dependencies": {
     "axios": "^1.0.0",
-    "gdc-common-utils-ts": "^2.0.2",
+    "gdc-common-utils-ts": "^2.0.6",
     "jose": "^4.0.0",
     "jsonwebtoken": "^9.0.0"
   },
