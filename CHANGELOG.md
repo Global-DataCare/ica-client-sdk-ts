@@ -4,6 +4,11 @@ All notable changes to `ica-client-sdk-ts` will be documented in this file.
 
 ## [Unreleased]
 
+## [2.0.7] - 2026-06-18
+
+- Updated dependency target to gdc-common-utils-ts@^2.0.6.
+
+
 ## [2.0.6] - 2026-06-19
 
 ### Changed
