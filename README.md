@@ -83,6 +83,19 @@ const client = new IcaClient({
 // - those authorizations are emitted by ICA in `credentialSubject.makesOffer`
 //   and are validated later by GW during activation
 ```
+
+There is no `setServiceType(...)` helper in `IcaClient` for direct ICA `_verify`.
+The SDK does not invent or issue organization service authorizations locally.
+ICA emits them in the resulting Organization VC under:
+
+- `credentialSubject.makesOffer.category`
+- `credentialSubject.makesOffer.serviceType`
+
+In other words:
+
+- `sector` selects the ICA route namespace
+- `makesOffer.serviceType` is the authorization returned by ICA
+
 ### SDK local default (Node/test/reference)
 
 The repository includes:
@@ -208,6 +221,8 @@ const legalRepresentativeInfo = client.getLegalRepresentativeInfoFromVerifyRespo
 console.log(organizationInfo?.legalName);
 console.log(organizationInfo?.taxID);
 console.log(organizationInfo?.address?.addressCountry);
+console.log(organizationInfo?.makesOffer?.category);
+console.log(organizationInfo?.makesOffer?.serviceType);
 console.log(legalRepresentativeInfo?.givenName);
 console.log(legalRepresentativeInfo?.familyName);
 console.log(legalRepresentativeInfo?.identifier); // National ID
@@ -323,6 +338,41 @@ await client.verifyTerms(pdfBytesOrLink, {
   }
 });
 ```
+
+### Reading organization service authorization from `_verify`
+
+For legal-organization onboarding, read the authorization from the ICA-issued
+Organization VC. The relevant SDK getters are:
+
+- `getOrganizationCredentialFromVerifyResponse(response)`
+- `getOrganizationInfoFromVerifyResponse(response)`
+
+Example:
+
+```ts
+const verifyResponse = await client.pollVerifyTermsResponse(thid);
+
+const organizationCredential =
+  client.getOrganizationCredentialFromVerifyResponse(verifyResponse);
+const organizationInfo =
+  client.getOrganizationInfoFromVerifyResponse(verifyResponse);
+
+console.log(organizationCredential?.credentialSubject?.makesOffer?.category);
+console.log(organizationCredential?.credentialSubject?.makesOffer?.serviceType);
+
+console.log(organizationInfo?.makesOffer?.category);
+console.log(organizationInfo?.makesOffer?.serviceType);
+```
+
+Typed SDK fields:
+
+- `IcaOrganizationCredentialSubject.makesOffer`
+- `IcaOrganizationOffer.category`
+- `IcaOrganizationOffer.serviceType`
+
+If a host flow needs to declare requested capabilities before ICA answers,
+that belongs to the higher-level GW CORE / host `_transaction` contract, not
+to the direct ICA `_verify` SDK constructor.
 
 ## Current Rules
 
