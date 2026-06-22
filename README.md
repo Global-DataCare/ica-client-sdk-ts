@@ -75,6 +75,13 @@ const client = new IcaClient({
   organizationVcs: [],
   crypto: globalThis.crypto
 });
+
+// Important:
+// - `sector` selects the ICA route namespace such as `health-care`
+// - it does not define the organization `serviceType` authorizations emitted in
+//   the resulting OrganizationCredential
+// - those authorizations are emitted by ICA in `credentialSubject.makesOffer`
+//   and are validated later by GW during activation
 ```
 ### SDK local default (Node/test/reference)
 

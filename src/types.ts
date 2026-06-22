@@ -219,6 +219,13 @@ export interface IcaDidCommResponse<TResource = unknown> {
   [key: string]: unknown;
 }
 
+export interface IcaOrganizationOffer {
+  '@type'?: string;
+  category?: string;
+  serviceType?: string | string[];
+  [key: string]: unknown;
+}
+
 export interface IcaOrganizationCredentialSubject {
   id?: string;
   '@type'?: string;
@@ -229,6 +236,7 @@ export interface IcaOrganizationCredentialSubject {
   alternateName?: string;
   additionalType?: string;
   address?: Record<string, unknown>;
+  makesOffer?: IcaOrganizationOffer;
   [key: string]: unknown;
 }
 

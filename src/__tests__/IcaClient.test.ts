@@ -96,7 +96,12 @@ function createVerifyResponseExample(): IcaVerifyTermsResponse {
               taxID: 'VATES-B00000000',
               sameAs: 'did:web:provider.example.org',
               url: 'provider.example.org',
-              alternateName: 'example-provider'
+              alternateName: 'example-provider',
+              makesOffer: {
+                '@type': 'Offer',
+                category: 'animal-care',
+                serviceType: 'organization/Composition.cruds,organization/ResearchSubject.cruds'
+              }
             }
           }
         },
@@ -933,11 +938,18 @@ describe('IcaClient', () => {
     const vcs = client.getVcsFromResponse(response);
 
     expect(credentials.organizationCredential?.credentialSubject?.legalName).toBe('Example Data Provider SL');
+    expect(credentials.organizationCredential?.credentialSubject?.makesOffer).toEqual({
+      '@type': 'Offer',
+      category: 'animal-care',
+      serviceType: 'organization/Composition.cruds,organization/ResearchSubject.cruds'
+    });
     expect(credentials.legalRepresentativeCredential?.credentialSubject?.sameAs).toBe('urn:multibase:zControllerHash');
     expect(credentials.legalRepresentativeCredential?.credentialSubject?.hasCredential?.material)
       .toBe('urn:ietf:params:oauth:jwk-thumbprint:sha-256:controller-thumbprint');
     expect(credentials.allCredentials).toHaveLength(2);
     expect(client.getOrganizationInfoFromVerifyResponse(response)?.taxID).toBe('VATES-B00000000');
+    expect(client.getOrganizationInfoFromVerifyResponse(response)?.makesOffer?.serviceType)
+      .toBe('organization/Composition.cruds,organization/ResearchSubject.cruds');
     expect(client.getLegalRepresentativeInfoFromVerifyResponse(response)?.givenName).toBe('Alex');
     expect(client.getLegalRepresentativeInfoFromVerifyResponse(response)?.familyName).toBe('Example');
     expect(client.getLegalRepresentativeInfoFromVerifyResponse(response)?.identifier).toBe('IDCES-99999999R');
