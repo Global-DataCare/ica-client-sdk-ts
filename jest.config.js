@@ -8,6 +8,10 @@ export default {
     '<rootDir>/src/__tests__/controllerBinding.test.ts',
     '<rootDir>/src/__tests__/IcaClient.live.test.ts',
   ],
+  moduleNameMapper: {
+    '^axios$': '<rootDir>/__mocks__/axios.ts',
+    '^(\\.{1,2}/.*)\\.js$': '$1',
+  },
   globals: {
     'ts-jest': {
       tsconfig: 'tsconfig.json',

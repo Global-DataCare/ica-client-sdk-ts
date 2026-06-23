@@ -2,8 +2,8 @@
 // File: src/IcaClient.ts
 
 import type { DidCommAttachment, DidCommMessage } from 'gdc-common-utils-ts/utils/didcomm';
-import { VcManager } from './VcManager';
-import { VpManager } from './VpManager';
+import { VcManager } from './VcManager.js';
+import { VpManager } from './VpManager.js';
 import axios, { AxiosInstance } from 'axios';
 import { prepareDidCommRequest, includeVpTokenInMessage, includeFileInMessage, getThidFromMessage, getDataResults } from 'gdc-common-utils-ts/utils/didcomm';
 import {
@@ -40,7 +40,7 @@ import {
   IcaVerifyTermsResource,
   IcaVerifyTermsResponse,
   VerifyTermsOptions
-} from './types';
+} from './types.js';
 export enum Sector {
   AnimalCare = 'animal-care',
   HealthCare = 'health-care',

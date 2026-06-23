@@ -4,6 +4,16 @@ All notable changes to `ica-client-sdk-ts` will be documented in this file.
 
 ## [Unreleased]
 
+## [2.0.10] - 2026-06-23
+
+- Restored ESM-consumable packaging by publishing explicit `.js` specifiers in
+  the built output, declaring `"type": "module"`, and exposing the package
+  through `exports`.
+- Fixed the SDK entrypoint so DIDComm types are exported as types only instead
+  of broken runtime re-exports.
+- Added a pack/install/import smoke test that catches published tarballs that
+  build locally but fail in a real ESM consumer.
+
 ## [2.0.9] - 2026-06-23
 
 - Updated dependency target to gdc-common-utils-ts@^2.0.7.

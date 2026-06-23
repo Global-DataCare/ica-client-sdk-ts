@@ -9,7 +9,7 @@ import type {
   IcaLegalRepresentativeCredential,
   IcaLegalRepresentativeCredentialSubject,
   IcaVerifyTermsResponse,
-} from './types';
+} from './types.js';
 
 /**
  * Minimal public JWK subsets supported by the shared RFC 7638 thumbprint
