@@ -4,6 +4,11 @@ All notable changes to `ica-client-sdk-ts` will be documented in this file.
 
 ## [Unreleased]
 
+## [2.0.9] - 2026-06-23
+
+- Updated dependency target to gdc-common-utils-ts@^2.0.7.
+
+
 ## [2.0.8] - 2026-06-22
 
 - Documented explicitly that `IcaClientConfig.sector` selects the ICA route
