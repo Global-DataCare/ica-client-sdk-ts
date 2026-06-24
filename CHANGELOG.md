@@ -4,6 +4,11 @@ All notable changes to `ica-client-sdk-ts` will be documented in this file.
 
 ## [Unreleased]
 
+## [2.0.11] - 2026-06-24
+
+- Updated dependency target to gdc-common-utils-ts@^2.0.11.
+
+
 ## [2.0.10] - 2026-06-23
 
 - Restored ESM-consumable packaging by publishing explicit `.js` specifiers in
