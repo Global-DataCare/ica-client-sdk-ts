@@ -3,11 +3,14 @@
 
 import { toJwkThumbprintSha256Urn } from 'gdc-common-utils-ts/utils/jwk-thumbprint';
 import { normalizeSameAsHash } from 'gdc-common-utils-ts/utils/same-as';
+import * as commonUtils from 'gdc-common-utils-ts';
 import type {
   IcaBundleResponseEntry,
   IcaJwk,
   IcaLegalRepresentativeCredential,
   IcaLegalRepresentativeCredentialSubject,
+  IcaOrganizationControllerCredential,
+  IcaOrganizationControllerCredentialSubject,
   IcaVerifyTermsResponse,
 } from './types.js';
 
@@ -36,6 +39,26 @@ export interface IcaRepresentativeBindingProjection {
   material?: string;
 }
 
+/** Binding projection for one independently issued controller service VC. */
+export interface IcaOrganizationControllerBindingProjection {
+  sameAs?: string;
+  material?: string;
+  /** Controller authority codes such as the HL7-derived `RESPRSN`. */
+  roleCodes: string[];
+  /** Professional occupations such as `ISCO-08|1330`. */
+  occupationCodes: string[];
+}
+
+type SharedOrganizationControllerReaders = {
+  readOrganizationControllerCredentialsFromResponseBody?: (body: unknown) => Array<Record<string, unknown>>;
+  extractOrganizationControllerSameAs?: (credential: unknown) => string | undefined;
+  extractOrganizationControllerBinding?: (credential: unknown) => string | undefined;
+  extractOrganizationControllerRoleCodes?: (credential: unknown) => string[];
+  extractOrganizationControllerOccupationCodes?: (credential: unknown) => string[];
+};
+
+const sharedOrganizationControllerReaders = commonUtils as unknown as SharedOrganizationControllerReaders;
+
 function asObject(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? value as Record<string, unknown>
@@ -49,7 +72,10 @@ function asNonEmptyString(value: unknown): string | undefined {
 }
 
 function hasTypeName(entry: IcaBundleResponseEntry<unknown>, expected: string): boolean {
-  return String(entry.type || '').trim().toLowerCase().includes(expected);
+  const resource = asObject(entry.resource);
+  const resourceTypes = Array.isArray(resource?.type) ? resource.type : [resource?.type];
+  return [entry.type, ...resourceTypes]
+    .some((value) => String(value || '').trim().toLowerCase().includes(expected));
 }
 
 function toThumbprintablePublicJwk(jwk: IcaJwk): ThumbprintablePublicJwk | undefined {
@@ -175,3 +201,95 @@ export function extractRepresentativeBindingProjection(
     ...(material ? { material } : {}),
   };
 }
+
+/**
+ * Finds every organization-controller credential entry in an ICA
+ * `_verify-response`. A legal-representative entry is never used as fallback.
+ *
+ * @param response Parsed DIDComm bundle returned by ICA.
+ */
+export function findOrganizationControllerCredentialEntries(
+  response: IcaVerifyTermsResponse,
+): Array<IcaBundleResponseEntry<IcaOrganizationControllerCredential>> {
+  const entries = Array.isArray(response.body?.data) ? response.body.data : [];
+  return entries.filter((entry) => hasTypeName(entry, 'servicecontroller')
+    || hasTypeName(entry, 'organizationcontroller')) as unknown as
+    Array<IcaBundleResponseEntry<IcaOrganizationControllerCredential>>;
+}
+
+/** Canonical name for finding ICA-issued service-controller entries. */
+export const findServiceControllerCredentialEntries =
+  findOrganizationControllerCredentialEntries;
+
+function readOrganizationControllerCredentials(
+  response: IcaVerifyTermsResponse,
+): IcaOrganizationControllerCredential[] {
+  const sharedReader = sharedOrganizationControllerReaders
+    .readOrganizationControllerCredentialsFromResponseBody;
+  if (sharedReader) {
+    try {
+      return sharedReader(response.body) as IcaOrganizationControllerCredential[];
+    } catch {
+      // A partial or legacy response can omit the full organization + person
+      // pair expected by the generic common-utils verification reader.
+    }
+  }
+  return findOrganizationControllerCredentialEntries(response)
+    .map((entry) => entry.resource)
+    .filter((credential): credential is IcaOrganizationControllerCredential => Boolean(credential));
+}
+
+/**
+ * Extracts all controller service subjects from an ICA `_verify-response`.
+ * Uses the shared common-utils response reader when that version is available,
+ * while retaining compatibility with older installed common-utils versions.
+ *
+ * @param response Parsed DIDComm bundle returned by ICA.
+ */
+export function getOrganizationControllerCredentialSubjects(
+  response: IcaVerifyTermsResponse,
+): IcaOrganizationControllerCredentialSubject[] {
+  const credentials = readOrganizationControllerCredentials(response);
+  const subjects = credentials
+    .map((credential) => asObject(credential?.credentialSubject))
+    .filter((subject): subject is Record<string, unknown> => Boolean(subject));
+  return subjects as IcaOrganizationControllerCredentialSubject[];
+}
+
+/** Canonical name for reading ICA-issued service-controller subjects. */
+export const getServiceControllerCredentialSubjects =
+  getOrganizationControllerCredentialSubjects;
+
+/**
+ * Reads the stable alias and key material for every organization controller in
+ * a verification response.
+ *
+ * @param response Parsed DIDComm bundle returned by ICA.
+ */
+export function extractOrganizationControllerBindingProjections(
+  response: IcaVerifyTermsResponse,
+): IcaOrganizationControllerBindingProjection[] {
+  const credentials = readOrganizationControllerCredentials(response);
+
+  return credentials.map((credential) => {
+    const subject = asObject(credential.credentialSubject);
+    const owner = asObject(subject?.owner);
+    const hasCredential = asObject(owner?.hasCredential);
+    const sameAs = sharedOrganizationControllerReaders.extractOrganizationControllerSameAs?.(credential)
+      || asNonEmptyString(owner?.sameAs);
+    const material = sharedOrganizationControllerReaders.extractOrganizationControllerBinding?.(credential)
+      || asNonEmptyString(hasCredential?.material);
+    const roleCodes = sharedOrganizationControllerReaders.extractOrganizationControllerRoleCodes?.(credential) || [];
+    const occupationCodes = sharedOrganizationControllerReaders.extractOrganizationControllerOccupationCodes?.(credential) || [];
+    return {
+      ...(sameAs ? { sameAs } : {}),
+      ...(material ? { material } : {}),
+      roleCodes,
+      occupationCodes,
+    };
+  });
+}
+
+/** Canonical name for extracting service-controller binding projections. */
+export const extractServiceControllerBindingProjections =
+  extractOrganizationControllerBindingProjections;

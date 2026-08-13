@@ -965,6 +965,64 @@ describe('IcaClient', () => {
       expect.objectContaining({ kid: 'controller-es384-001' })
     );
   });
+
+  it('should extract organization controller credentials and prefer their attached public key', () => {
+    const response = createVerifyResponseExample();
+    response.attachments?.push({
+      id: 'vc-jwt-controller',
+      format: 'vc+jwt',
+      media_type: 'application/vc+jwt',
+      filename: 'ServiceController-verification-v1.0-3.jwt',
+      data: { json: { format: 'vc+jwt', jwt: '<vc-jwt-organization-controller>' } },
+    });
+    response.body?.data?.push({
+      type: 'ServiceController-verification-v1.0',
+      publicKeyJwk: {
+        kty: 'EC',
+        crv: 'P-384',
+        x: 'technical-controller-x',
+        y: 'technical-controller-y',
+        kid: 'technical-controller-es384',
+      },
+      response: { status: '200' },
+      resource: {
+        id: 'urn:uuid:controller-vc-001',
+        type: ['VerifiableCredential', 'ServiceCredential', 'ServiceControllerCredential'],
+        credentialSubject: {
+          id: 'did:web:globaldatacare.es:animal-care:organization:taxid:VATES-B00000000',
+          '@type': 'Service',
+          provider: {
+            '@type': 'Organization',
+            taxID: 'VATES-B00000000',
+          },
+          owner: {
+            '@type': 'Person',
+            additionalType: 'RESPRSN',
+            sameAs: 'urn:multibase:zTechnicalController',
+            hasOccupation: { '@type': 'Occupation', occupationalCategory: 'ISCO-08|1330' },
+            hasCredential: {
+              material: 'urn:ietf:params:oauth:jwk-thumbprint:sha-256:technical-controller',
+            },
+          },
+        },
+      },
+    });
+
+    const credentials = client.getCredentialsFromVerifyResponse(response);
+    expect(credentials.serviceControllerCredentials).toHaveLength(1);
+    expect(credentials.organizationControllerCredentials).toHaveLength(1);
+    expect(credentials.allCredentials).toHaveLength(3);
+    expect(client.getOrganizationControllerCredentialsFromVerifyResponse(response)[0]
+      ?.credentialSubject?.owner?.sameAs).toBe('urn:multibase:zTechnicalController');
+    expect(client.getOrganizationControllerInfoFromVerifyResponse(response)[0]?.owner?.hasOccupation)
+      .toEqual({ '@type': 'Occupation', occupationalCategory: 'ISCO-08|1330' });
+    expect(client.getServiceControllerInfoFromVerifyResponse(response)[0]?.owner?.additionalType)
+      .toBe('RESPRSN');
+    expect(client.getControllerBindingPublicKeyFromVerifyResponse(response)?.kid)
+      .toBe('technical-controller-es384');
+    expect(client.getVcsFromResponse(response).organizationControllerVCs)
+      .toEqual(['<vc-jwt-organization-controller>']);
+  });
 });
 
 describe('IcaClient with fetch', () => {

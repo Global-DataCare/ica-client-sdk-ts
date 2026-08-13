@@ -4,6 +4,30 @@ All notable changes to `ica-client-sdk-ts` will be documented in this file.
 
 ## [Unreleased]
 
+## [2.0.12] - 2026-08-13
+
+- Run Jest against source tests only under Node's ESM VM support, map exported
+  Common Utils subpaths to their packaged JavaScript, and retain the packed ESM
+  consumer smoke test as a release gate.
+- Recognize canonical ICA `ServiceControllerCredential` and
+  `ServiceController-verification-v1.0` results while retaining read
+  compatibility for `OrganizationControllerCredential`. Controller authority
+  is read from schema.org `owner.additionalType`; ISCO stays in
+  `owner.hasOccupation.occupationalCategory`.
+- Clarify that legacy two-VC responses leave the controller-credential
+  collection empty and that transport-level JWK fallback does not promote the
+  representative VC to controller authority.
+- Expose controller `roleCodes` and `occupationCodes` independently in binding
+  projections, including `RESPRSN` and `ISCO-08|1330` from the canonical ICA
+  controller credential.
+
+- Add typed extraction for all ICA `OrganizationControllerCredential` service
+  VCs, their subjects and VC-JWT attachments. Controller key extraction now
+  prefers the dedicated controller entry and falls back to the legacy legal
+  representative entry.
+- Reuse the common-utils controller response readers when available while
+  remaining compatible with older two-credential ICA responses.
+
 ## [2.0.11] - 2026-06-24
 
 - Updated dependency target to gdc-common-utils-ts@^2.0.11.

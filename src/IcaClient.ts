@@ -28,6 +28,8 @@ import {
   IcaRemoveOrganizationTermsResponse,
   IcaOrganizationCredential,
   IcaOrganizationCredentialSubject,
+  IcaOrganizationControllerCredential,
+  IcaOrganizationControllerCredentialSubject,
   IdentityCodeBody,
   IdentityDcrBindingRequest,
   IdentityDcrBody,
@@ -609,18 +611,30 @@ export class IcaClient {
     return patterns.some(pattern => text.includes(pattern));
   }
 
-  private isCredentialResource(resource: unknown): resource is IcaOrganizationCredential | IcaLegalRepresentativeCredential {
+  private isCredentialResource(
+    resource: unknown
+  ): resource is IcaOrganizationCredential | IcaLegalRepresentativeCredential | IcaOrganizationControllerCredential {
     return !!resource && typeof resource === 'object' && 'credentialSubject' in resource;
   }
 
   private isOrganizationCredentialEntry(entry: IcaBundleResponseEntry<IcaVerifyTermsResource>): entry is IcaBundleResponseEntry<IcaOrganizationCredential> {
-    return this.getEntryTypeNames(entry).some(typeName => typeName.includes('organization'));
+    const typeNames = this.getEntryTypeNames(entry);
+    return !typeNames.some(typeName => typeName.includes('organizationcontroller'))
+      && typeNames.some(typeName => typeName.includes('organizationcredential') || typeName === 'organization-verification-v1.0');
   }
 
   private isLegalRepresentativeCredentialEntry(entry: IcaBundleResponseEntry<IcaVerifyTermsResource>): entry is IcaBundleResponseEntry<IcaLegalRepresentativeCredential> {
     return this.getEntryTypeNames(entry).some(
       typeName => typeName.includes('legalrepresentative') || typeName.includes('personcredential')
     );
+  }
+
+  private isOrganizationControllerCredentialEntry(
+    entry: IcaBundleResponseEntry<IcaVerifyTermsResource>
+  ): entry is IcaBundleResponseEntry<IcaOrganizationControllerCredential> {
+    return this.getEntryTypeNames(entry).some(typeName => (
+      typeName.includes('servicecontroller') || typeName.includes('organizationcontroller')
+    ));
   }
 
   private extractDidDocumentFieldsFromVcs(
@@ -1257,22 +1271,43 @@ export class IcaClient {
     };
   }
 
+  /**
+   * Splits an ICA verification response into its independent credential roles.
+   *
+   * Canonical responses contain organization, legal-representative and
+   * service-controller credentials. A legacy two-credential response leaves
+   * both controller arrays empty; this reader never
+   * substitutes the representative credential as a controller credential.
+   */
   getCredentialsFromVerifyResponse(response: IcaVerifyTermsResponse): {
     organizationCredential?: IcaOrganizationCredential;
     legalRepresentativeCredential?: IcaLegalRepresentativeCredential;
-    allCredentials: Array<IcaOrganizationCredential | IcaLegalRepresentativeCredential>;
+    serviceControllerCredentials: IcaOrganizationControllerCredential[];
+    /** @deprecated Use `serviceControllerCredentials`. */
+    organizationControllerCredentials: IcaOrganizationControllerCredential[];
+    allCredentials: Array<
+      IcaOrganizationCredential
+      | IcaLegalRepresentativeCredential
+      | IcaOrganizationControllerCredential
+    >;
   } {
     const entries = this.getResponseEntries<IcaVerifyTermsResource>(response);
     const allCredentials = entries
       .map(entry => entry.resource)
-      .filter((resource): resource is IcaOrganizationCredential | IcaLegalRepresentativeCredential => this.isCredentialResource(resource));
+      .filter((resource): resource is IcaOrganizationCredential | IcaLegalRepresentativeCredential | IcaOrganizationControllerCredential => this.isCredentialResource(resource));
 
     const organizationCredential = entries.find(entry => this.isOrganizationCredentialEntry(entry))?.resource;
     const legalRepresentativeCredential = entries.find(entry => this.isLegalRepresentativeCredentialEntry(entry))?.resource;
+    const organizationControllerCredentials = entries
+      .filter(entry => this.isOrganizationControllerCredentialEntry(entry))
+      .map(entry => entry.resource)
+      .filter((credential): credential is IcaOrganizationControllerCredential => Boolean(credential));
 
     return {
       organizationCredential,
       legalRepresentativeCredential,
+      serviceControllerCredentials: organizationControllerCredentials,
+      organizationControllerCredentials,
       allCredentials
     };
   }
@@ -1291,14 +1326,38 @@ export class IcaClient {
     };
   }
 
+  /**
+   * Reads the public controller binding JWK transported outside a VC resource.
+   *
+   * The representative-entry fallback is transport compatibility for old ICA
+   * responses. It does not mean the LegalRepresentativeCredential grants
+   * controller authority; authorization still requires the canonical
+   * ServiceControllerCredential or the narrowly validated old combined
+   * representative VC.
+   */
   getControllerBindingPublicKeyFromVerifyResponse(response: IcaVerifyTermsResponse): IcaJwk | undefined {
-    const entry = this.getResponseEntries<IcaVerifyTermsResource>(response)
-      .find(candidate => this.isLegalRepresentativeCredentialEntry(candidate));
-    return entry?.publicKeyJwk;
+    const entries = this.getResponseEntries<IcaVerifyTermsResource>(response);
+    const controllerEntry = entries.find(candidate => this.isOrganizationControllerCredentialEntry(candidate));
+    const compatibilityRepresentativeEntry = entries.find(candidate => this.isLegalRepresentativeCredentialEntry(candidate));
+    return controllerEntry?.publicKeyJwk || compatibilityRepresentativeEntry?.publicKeyJwk;
   }
 
   getLegalRepresentativeCredentialFromVerifyResponse(response: IcaVerifyTermsResponse): IcaLegalRepresentativeCredential | undefined {
     return this.getCredentialsFromVerifyResponse(response).legalRepresentativeCredential;
+  }
+
+  /** Returns all independently issued organization-controller service VCs. */
+  getOrganizationControllerCredentialsFromVerifyResponse(
+    response: IcaVerifyTermsResponse
+  ): IcaOrganizationControllerCredential[] {
+    return this.getCredentialsFromVerifyResponse(response).organizationControllerCredentials;
+  }
+
+  /** Returns all canonical ICA-issued service-controller VCs. */
+  getServiceControllerCredentialsFromVerifyResponse(
+    response: IcaVerifyTermsResponse
+  ): IcaOrganizationControllerCredential[] {
+    return this.getCredentialsFromVerifyResponse(response).serviceControllerCredentials;
   }
 
   getOrganizationInfoFromVerifyResponse(response: IcaVerifyTermsResponse): IcaOrganizationCredentialSubject | undefined {
@@ -1307,6 +1366,24 @@ export class IcaClient {
 
   getLegalRepresentativeInfoFromVerifyResponse(response: IcaVerifyTermsResponse): IcaLegalRepresentativeCredentialSubject | undefined {
     return this.getLegalRepresentativeCredentialFromVerifyResponse(response)?.credentialSubject;
+  }
+
+  /** Returns every controller service subject without collapsing actors. */
+  getOrganizationControllerInfoFromVerifyResponse(
+    response: IcaVerifyTermsResponse
+  ): IcaOrganizationControllerCredentialSubject[] {
+    return this.getOrganizationControllerCredentialsFromVerifyResponse(response)
+      .map((credential) => credential.credentialSubject)
+      .filter((subject): subject is IcaOrganizationControllerCredentialSubject => Boolean(subject));
+  }
+
+  /** Returns every canonical service-controller subject without collapsing actors. */
+  getServiceControllerInfoFromVerifyResponse(
+    response: IcaVerifyTermsResponse
+  ): IcaOrganizationControllerCredentialSubject[] {
+    return this.getServiceControllerCredentialsFromVerifyResponse(response)
+      .map((credential) => credential.credentialSubject)
+      .filter((subject): subject is IcaOrganizationControllerCredentialSubject => Boolean(subject));
   }
 
   getOrganizationInfoFromCredential(credentialInput: string | object): IcaOrganizationCredentialSubject | undefined {
@@ -1320,6 +1397,7 @@ export class IcaClient {
   getVcsFromResponse(response: IcaVerifyTermsResponse): {
     organizationVC?: string;
     legalRepresentativeVC?: string;
+    organizationControllerVCs: string[];
     allVcs: string[];
   } {
     const attachments = Array.isArray(response.attachments) ? response.attachments : [];
@@ -1331,8 +1409,22 @@ export class IcaClient {
     const fallbackOrganizationAttachment = vcAttachments[0];
     const fallbackLegalRepresentativeAttachment = vcAttachments[1];
 
+    const organizationControllerAttachments = vcAttachments.filter(attachment =>
+      this.attachmentNameMatches(attachment, [
+        'servicecontroller',
+        'service-controller',
+        'organizationcontroller',
+        'organization-controller',
+      ])
+    );
     const organizationAttachment = vcAttachments.find(attachment =>
       this.attachmentNameMatches(attachment, ['organization'])
+      && !this.attachmentNameMatches(attachment, [
+        'servicecontroller',
+        'service-controller',
+        'organizationcontroller',
+        'organization-controller',
+      ])
     ) || fallbackOrganizationAttachment;
     const legalRepresentativeAttachment = vcAttachments.find(attachment =>
       this.attachmentNameMatches(attachment, ['legalrepresentative', 'legal-representative'])
@@ -1341,6 +1433,9 @@ export class IcaClient {
     return {
       organizationVC: organizationAttachment ? this.attachmentJwt(organizationAttachment) : undefined,
       legalRepresentativeVC: legalRepresentativeAttachment ? this.attachmentJwt(legalRepresentativeAttachment) : undefined,
+      organizationControllerVCs: organizationControllerAttachments
+        .map((attachment) => this.attachmentJwt(attachment))
+        .filter((jwt): jwt is string => Boolean(jwt)),
       allVcs
     };
   }

@@ -4,15 +4,16 @@ export default {
   testEnvironment: 'node',
   extensionsToTreatAsEsm: ['.ts'],
   setupFilesAfterEnv: ['<rootDir>/src/__tests__/jest.setup.ts'],
+  testMatch: ['<rootDir>/src/**/*.test.ts'],
   moduleNameMapper: {
     '^axios$': '<rootDir>/__mocks__/axios.ts',
+    '^gdc-common-utils-ts/(.*)$': '<rootDir>/node_modules/gdc-common-utils-ts/dist/$1.js',
     '^(\\.{1,2}/.*)\\.js$': '$1',
   },
-  globals: {
-    'ts-jest': {
+  transform: {
+    '^.+\\.tsx?$': ['ts-jest', {
       tsconfig: 'tsconfig.json',
       useESM: true,
-    },
+    }],
   },
-  transformIgnorePatterns: ['/node_modules/(?!gdc-common-utils-ts)'],
 };

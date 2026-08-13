@@ -9,11 +9,20 @@ export { VpManager } from './VpManager.js';
 export {
   buildControllerCredentialMaterial,
   extractRepresentativeBindingProjection,
+  extractOrganizationControllerBindingProjections,
+  extractServiceControllerBindingProjections,
+  findOrganizationControllerCredentialEntries,
+  findServiceControllerCredentialEntries,
   findLegalRepresentativeCredentialEntry,
+  getOrganizationControllerCredentialSubjects,
+  getServiceControllerCredentialSubjects,
   getLegalRepresentativeCredentialSubject,
   normalizeControllerSameAs,
 } from './controllerBinding.js';
-export type { IcaRepresentativeBindingProjection } from './controllerBinding.js';
+export type {
+  IcaOrganizationControllerBindingProjection,
+  IcaRepresentativeBindingProjection,
+} from './controllerBinding.js';
 export type {
   ApiKeyActionRequest,
   BackendAuthRequestOptions,
@@ -32,6 +41,12 @@ export type {
   IcaLegalRepresentativeCredentialSubject,
   IcaOrganizationCredential,
   IcaOrganizationCredentialSubject,
+  IcaOrganizationControllerCredential,
+  IcaOrganizationControllerCredentialSubject,
+  IcaServiceControllerCredential,
+  IcaServiceControllerCredentialSubject,
+  IcaOrganizationControllerOwner,
+  IcaOrganizationControllerProvider,
   IdentityCodeBody,
   IdentityDcrBindingRequest,
   IdentityDcrBody,

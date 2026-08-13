@@ -299,6 +299,45 @@ export interface IcaCredential<TSubject = Record<string, unknown>> {
 export type IcaOrganizationCredential = IcaCredential<IcaOrganizationCredentialSubject>;
 export type IcaLegalRepresentativeCredential = IcaCredential<IcaLegalRepresentativeCredentialSubject>;
 
+/** Controller actor bound to an organization tenant service credential. */
+export interface IcaOrganizationControllerOwner {
+  '@type'?: string;
+  /** Bare HL7-derived controller authority code, canonically `RESPRSN`. */
+  additionalType?: string | string[];
+  sameAs?: string;
+  hasOccupation?: Record<string, unknown> | Array<Record<string, unknown>>;
+  hasCredential?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+/** Provider reference embedded in an organization-controller service VC. */
+export interface IcaOrganizationControllerProvider {
+  '@type'?: string;
+  legalName?: string;
+  taxID?: string;
+  identifier?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+/** Service subject emitted once for each independently bound controller. */
+export interface IcaOrganizationControllerCredentialSubject {
+  id?: string;
+  '@type'?: string;
+  serviceType?: string;
+  provider?: IcaOrganizationControllerProvider;
+  owner?: IcaOrganizationControllerOwner;
+  [key: string]: unknown;
+}
+
+/** ICA-issued credential binding one controller actor/key to a tenant service. */
+export type IcaOrganizationControllerCredential =
+  IcaCredential<IcaOrganizationControllerCredentialSubject>;
+
+/** Canonical name for the ICA-issued tenant service controller credential. */
+export type IcaServiceControllerCredentialSubject = IcaOrganizationControllerCredentialSubject;
+/** Canonical name for the ICA-issued tenant service controller credential. */
+export type IcaServiceControllerCredential = IcaOrganizationControllerCredential;
+
 export interface IcaFailedTermsVerificationResource {
   id?: string;
   type?: string;
@@ -320,6 +359,7 @@ export interface IcaFailedTermsVerificationResource {
 export type IcaVerifyTermsResource =
   | IcaOrganizationCredential
   | IcaLegalRepresentativeCredential
+  | IcaOrganizationControllerCredential
   | IcaFailedTermsVerificationResource;
 
 export type IcaVerifyTermsResponse = IcaDidCommResponse<IcaVerifyTermsResource>;

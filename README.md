@@ -113,7 +113,11 @@ secure UUID generation.
 ## Usage
 
 ```typescript
-import { IcaClient, Sector } from 'ica-client-sdk-ts';
+import {
+  extractServiceControllerBindingProjections,
+  IcaClient,
+  Sector,
+} from 'ica-client-sdk-ts';
 
 const client = new IcaClient({
   sector: Sector.HealthCare,
@@ -204,19 +208,33 @@ const verifyResponse = await client.pollVerifyTermsResponse(thid);
 
 // v2 bootstrap helpers:
 // - organization public/private JWK live outside resource on the organization entry
-// - controller public JWK lives outside resource on the legal representative entry
+// - controller public JWK lives on the ServiceController entry
+// - older ICA responses may still expose it on the legal representative entry
 const organizationKeyMaterial = client.getOrganizationKeyMaterialFromVerifyResponse(verifyResponse);
 const controllerBindingPublicKey = client.getControllerBindingPublicKeyFromVerifyResponse(verifyResponse);
 
 // Get VC JWT attachments from the DIDComm response
-const { organizationVC, legalRepresentativeVC, allVcs } = client.getVcsFromResponse(verifyResponse);
+const {
+  organizationVC,
+  legalRepresentativeVC,
+  organizationControllerVCs, // deprecated transport label, still readable
+  allVcs,
+} = client.getVcsFromResponse(verifyResponse);
 
 // Get the credential objects from verify-response body.data[].resource
 const organizationCredential = client.getOrganizationCredentialFromVerifyResponse(verifyResponse);
 const legalRepresentativeCredential = client.getLegalRepresentativeCredentialFromVerifyResponse(verifyResponse);
+const serviceControllerCredentials =
+  client.getServiceControllerCredentialsFromVerifyResponse(verifyResponse);
+
+// Binding projections keep authority and professional occupation independent:
+// { roleCodes: ['RESPRSN'], occupationCodes: ['ISCO-08|1330'], ... }
+const controllerBindings = extractServiceControllerBindingProjections(verifyResponse);
 // Get structured credentialSubject info using schema.org-style shapes
 const organizationInfo = client.getOrganizationInfoFromVerifyResponse(verifyResponse);
 const legalRepresentativeInfo = client.getLegalRepresentativeInfoFromVerifyResponse(verifyResponse);
+const serviceControllerInfo =
+  client.getServiceControllerInfoFromVerifyResponse(verifyResponse);
 
 console.log(organizationInfo?.legalName);
 console.log(organizationInfo?.taxID);
@@ -226,6 +244,8 @@ console.log(organizationInfo?.makesOffer?.serviceType);
 console.log(legalRepresentativeInfo?.givenName);
 console.log(legalRepresentativeInfo?.familyName);
 console.log(legalRepresentativeInfo?.identifier); // National ID
+console.log(organizationControllerInfo[0]?.owner?.sameAs);
+console.log(organizationControllerInfo[0]?.owner?.hasCredential);
 // - meta.jws.protected.jwk is the DIDComm communication key
 // - body.data[].resource.controller.publicKeyJwk is the controller business binding key
 // - the organization credential-signing key is sent as an extra JWK attachment
@@ -520,6 +540,8 @@ type VerifyResponse = {
 
 - `getVcsFromResponse(response)`
 - `getLegalRepresentativeCredentialFromVerifyResponse(response)`
+- `getServiceControllerCredentialsFromVerifyResponse(response)`
+- `getServiceControllerInfoFromVerifyResponse(response)`
 - `getOrganizationInfoFromVerifyResponse(response)`
 Using the `dataspace-ica-ts` OpenAPI example, the main fields come from:
 

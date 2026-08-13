@@ -1,6 +1,6 @@
 {
   "name": "ica-client-sdk-ts",
-  "version": "2.0.11",
+  "version": "2.0.12",
   "type": "module",
   "description": "ICA Client SDK for TypeScript, supporting React and React Native, for interacting with dataspace-ica-ts services via DIDComm.",
   "main": "dist/index.js",
@@ -14,8 +14,8 @@
   },
   "scripts": {
     "build": "tsc",
-    "test": "ICA_BASE_URL=http://localhost:3310 jest",
-    "test:local": "ICA_BASE_URL=http://localhost:3310 jest",
+    "test": "NODE_OPTIONS=--experimental-vm-modules ICA_BASE_URL=http://localhost:3310 jest",
+    "test:local": "NODE_OPTIONS=--experimental-vm-modules ICA_BASE_URL=http://localhost:3310 jest",
     "test:binding": "NODE_OPTIONS=--experimental-vm-modules jest --config ./jest.live.config.js --runInBand --runTestsByPath src/__tests__/controllerBinding.test.ts",
     "test:live": "NODE_OPTIONS=--experimental-vm-modules ICA_LIVE_E2E=1 ICA_BASE_URL=http://localhost:3310 jest --config ./jest.live.config.js --runInBand --runTestsByPath src/__tests__/IcaClient.live.test.ts",
     "test:pack:esm": "npm run build && node ./scripts/smoke-esm-consumer.mjs",
@@ -46,7 +46,7 @@
   },
   "dependencies": {
     "axios": "^1.0.0",
-    "gdc-common-utils-ts": "^2.0.11",
+    "gdc-common-utils-ts": "2.5.3",
     "jose": "^4.0.0",
     "jsonwebtoken": "^9.0.0"
   },
