@@ -389,8 +389,9 @@ export class IcaClient {
     const body: Record<string, any> = options.body || {};
     const controllerBindingPublicKeyJwk = options.controllerPayload?.publicKeyJwk
       || this.buildConfiguredPublicJwk(this.controllerBindingPublicKey);
+    const controllerPayload = options.controllerPayload;
 
-    if (options.organizationPayload || options.legalRepresentativePayload || controllerBindingPublicKeyJwk) {
+    if (options.organizationPayload || options.legalRepresentativePayload || controllerPayload || controllerBindingPublicKeyJwk) {
       if (!body.data) {
         body.data = [{ resource: {} }];
       } else if (Array.isArray(body.data) && body.data.length > 0 && !body.data[0].resource) {
@@ -406,10 +407,11 @@ export class IcaClient {
       if (options.legalRepresentativePayload) {
         resource.legalRepresentative = options.legalRepresentativePayload;
       }
-      if (controllerBindingPublicKeyJwk) {
+      if (controllerPayload || controllerBindingPublicKeyJwk) {
         resource.controller = {
           ...(resource.controller || {}),
-          publicKeyJwk: controllerBindingPublicKeyJwk
+          ...(controllerPayload || {}),
+          ...(controllerBindingPublicKeyJwk ? { publicKeyJwk: controllerBindingPublicKeyJwk } : {})
         };
       }
     }
