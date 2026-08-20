@@ -4,6 +4,8 @@ All notable changes to `ica-client-sdk-ts` will be documented in this file.
 
 ## [Unreleased]
 
+## [2.0.13] - 2026-08-20
+
 - Preserve typed `controllerPayload.did`, `controllerPayload.sameAs` and
   `controllerPayload.jwks` in `_verify`, allowing portals to build the
   controller with the shared `buildProfessionalDidWeb(...)` algorithm instead
