@@ -4,6 +4,14 @@ All notable changes to `ica-client-sdk-ts` will be documented in this file.
 
 ## [Unreleased]
 
+- Preserve typed `controllerPayload.did`, `controllerPayload.sameAs` and
+  `controllerPayload.jwks` in `_verify`, allowing portals to build the
+  controller with the shared `buildProfessionalDidWeb(...)` algorithm instead
+  of losing that binding while only the JWK reaches ICA.
+- Document that those fields identify the submitted JWK's actual owner. A
+  legacy representative JWK must not be labelled with a separately designated
+  technical controller, which binds its own key later through the sector flow.
+
 ## [2.0.12] - 2026-08-13
 
 - Run Jest against source tests only under Node's ESM VM support, map exported

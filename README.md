@@ -175,6 +175,10 @@ await client.verifyTerms(pdfBytesOrLink, {
     email: 'controller@example.org'
   },
   controllerPayload: {
+    // Build this once with gdc-common-utils-ts buildOrganizationDidWeb() +
+    // buildProfessionalDidWeb(); ICA and GW then retain the same public actor.
+    did: controllerDid,
+    sameAs: controllerSameAs,
     publicKeyJwk: controllerBindingPublicKey
   },
   meta: {
@@ -187,6 +191,17 @@ await client.verifyTerms(pdfBytesOrLink, {
     }
   }
 });
+
+`controllerPayload.did` is optional for older callers. When supplied, the SDK
+forwards it unchanged beside the controller JWK; it does not invent a second
+DID or derive one from transport metadata.
+
+`controllerPayload.did` and `.sameAs` identify the owner of
+`controllerPayload.publicKeyJwk`. In a legacy legal-representative registration,
+use the representative identity here even when the signed PDF designates a
+different future technical controller. Do not attach the representative JWK to
+that future actor. The technical controller later calls the sector flow with
+its own DID, alias and JWK before completing DCR.
 
 // The SDK sends FAPI-style request envelopes with:
 // - jti: request identifier
@@ -208,8 +223,8 @@ const verifyResponse = await client.pollVerifyTermsResponse(thid);
 
 // v2 bootstrap helpers:
 // - organization public/private JWK live outside resource on the organization entry
-// - controller public JWK lives on the ServiceController entry
-// - older ICA responses may still expose it on the legal representative entry
+// - a separately bound controller JWK lives on the ServiceController entry
+// - a legacy representative-owned JWK lives on the legal representative entry
 const organizationKeyMaterial = client.getOrganizationKeyMaterialFromVerifyResponse(verifyResponse);
 const controllerBindingPublicKey = client.getControllerBindingPublicKeyFromVerifyResponse(verifyResponse);
 

@@ -142,26 +142,33 @@ export interface VerifyTermsLegalRepresentativePayload {
  * payload of `_verify`.
  *
  * Separation of concerns:
- * - this key represents the real controller whose continuity should be
- *   reflected in `credentialSubject.hasCredential.material`
+ * - this key belongs to the actor that submits it; during legacy organization
+ *   registration that actor is normally the legal representative
+ * - a different technical controller named by the PDF is only a pending
+ *   designation and must later submit its own JWK from the sector portal
  * - this key is distinct from any DIDComm communication key carried in
  *   `meta.jws` / `meta.jwe`
  * - device/profile/BFF communication keys may rotate without changing the
  *   controller binding represented by the VC
  */
 export interface VerifyTermsControllerPayload {
+  /** Canonical DID of the actor that owns `publicKeyJwk`. */
+  did?: string;
+  /** Stable alias of the actor that owns `publicKeyJwk`, normally urn:multibase:z.... */
+  sameAs?: string;
   /**
-   * Public controller operation-signing key that ICA should bind into the
-   * representative VC.
+   * Public operation-signing key that ICA binds only to the identified owner.
    *
    * Intended ICA effect:
-   * - source for `credentialSubject.hasCredential.material`
+   * - source for that owner's `credentialSubject.hasCredential.material`
    *
    * Non-responsibilities:
    * - not a transport-envelope communication key
    * - not a replacement for `meta.jws` / `meta.jwe`
    */
   publicKeyJwk?: IcaJwk;
+  /** Optional additional public controller keys and their DID purposes. */
+  jwks?: IcaJwks;
 }
 
 export interface VerifyTermsOptions {

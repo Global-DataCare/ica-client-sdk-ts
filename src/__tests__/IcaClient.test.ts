@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { IcaClient, Sector } from '../IcaClient';
 import { IcaCrypto, IcaVerifyTermsResponse } from '../types';
+import { buildOrganizationDidWeb, buildProfessionalDidWeb } from 'gdc-common-utils-ts/utils/did';
 
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
@@ -325,6 +326,43 @@ describe('IcaClient', () => {
       }
     });
     expect(requestPayload?.meta).toBeUndefined();
+  });
+
+  /**
+   * The explicit DID and sameAs identify the owner of this JWK. Callers must
+   * not put a separately designated future controller here when the key
+   * belongs to the legal representative.
+   */
+  it('should preserve the canonical controller DID and alias during verifyTerms', async () => {
+    mockedAxios.request?.mockResolvedValueOnce({
+      status: 202,
+      headers: { location: '/dummy', 'retry-after': '1' }
+    });
+    const controllerDid = buildProfessionalDidWeb({
+      organizationDidWeb: buildOrganizationDidWeb({
+        hostDidWeb: 'did:web:portal.example.org',
+        tenantId: 'VATES-EXAMPLE',
+        jurisdiction: 'ES',
+        sector: 'onehealth-research'
+      }),
+      email: 'representative@example.org',
+      role: 'RESPRSN'
+    });
+
+    await client.verifyTerms('https://example.com/pdf.pdf', {
+      controllerPayload: {
+        did: controllerDid,
+        sameAs: 'urn:multibase:zExampleRepresentative',
+        publicKeyJwk: { kty: 'EC', crv: 'P-384', kid: 'controller-key', x: 'x', y: 'y' }
+      }
+    });
+
+    const controller = mockedAxios.request.mock.calls.at(-1)?.[0]?.data?.body?.data?.[0]?.resource?.controller;
+    expect(controller).toEqual(expect.objectContaining({
+      did: controllerDid,
+      sameAs: 'urn:multibase:zExampleRepresentative',
+      publicKeyJwk: expect.objectContaining({ kid: 'controller-key' })
+    }));
   });
 
   it('should keep DIDComm communication key and controller binding key separate during verifyTerms', async () => {
