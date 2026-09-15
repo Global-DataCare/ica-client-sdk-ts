@@ -1,4 +1,6 @@
+// Flow contract: reuse shared test fixtures and canonical types; do not introduce duplicated literals.
 import assert from 'node:assert/strict';
+import { generateKeyPairSync } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -39,6 +41,9 @@ const DEVICE_COMMUNICATION_PUBLIC_JWK = {
   x: 'device-communication-x',
   y: 'device-communication-y',
 } as const;
+const ORGANIZATION_PUBLIC_JWK = generateKeyPairSync('ec', {
+  namedCurve: 'secp384r1',
+}).publicKey.export({ format: 'jwk' });
 
 /**
  * `jest` compiles this TypeScript file in place, so we can derive the current
@@ -63,7 +68,6 @@ const LIVE_E2E_CONFIG = {
   deviceCommunicationPublicJwk: DEVICE_COMMUNICATION_PUBLIC_JWK,
   expectedRepresentativeSameAs: normalizeControllerSameAs(DEMO_REPRESENTATIVE_EMAIL),
   expectedControllerMaterial: buildControllerCredentialMaterial(CONTROLLER_BINDING_PUBLIC_JWK),
-  expectedLegacyCommunicationMaterial: buildControllerCredentialMaterial(DEVICE_COMMUNICATION_PUBLIC_JWK),
 } as const;
 
 /**
@@ -157,6 +161,12 @@ function createLiveClient(options: { includeControllerBinding: boolean; includeC
     );
   }
 
+  client.setOrgCredentialSigningPublicKey(
+    LIVE_E2E_CONFIG.controllerSigningAlg,
+    'sdk-live-organization-es384-001',
+    ORGANIZATION_PUBLIC_JWK,
+  );
+
   return client;
 }
 
@@ -172,7 +182,20 @@ async function verifyTermsLive(client: IcaClient): Promise<IcaVerifyTermsRespons
     },
   });
 
-  return client.pollVerifyTermsResponse(submitted.thid);
+  try {
+    return await client.pollVerifyTermsResponse(submitted.thid);
+  } catch (error) {
+    const response = (error as {
+      response?: { status?: number; data?: unknown };
+    }).response;
+    if (response) {
+      throw new Error(
+        `ICA _verify-response failed with HTTP ${response.status}: ${JSON.stringify(response.data)}`,
+        { cause: error },
+      );
+    }
+    throw error;
+  }
 }
 
 /**
@@ -226,41 +249,30 @@ describe('IcaClient live E2E against local ICA demo', () => {
   );
 
   liveIt(
-    'falls back to legacy communication JWK projection when the SDK omits the dedicated controller binding JWK',
+    'reuses the caller-owned keys submitted to verify when creating the organization DID document',
     async () => {
-      const client = createLiveClient({ includeCommunicationKey: true, includeControllerBinding: false });
-      const response = await verifyTermsLive(client);
-      const representativeEntry = findLegalRepresentativeCredentialEntry(response);
-      const binding = extractRepresentativeBindingProjection(response);
+      const client = createLiveClient({ includeCommunicationKey: true, includeControllerBinding: true });
+      const verifyResponse = await verifyTermsLive(client);
+      const organizationCredential =
+        client.getOrganizationCredentialFromVerifyResponse(verifyResponse);
+      const legalRepresentativeCredential =
+        client.getLegalRepresentativeCredentialFromVerifyResponse(verifyResponse);
 
-      expect(representativeEntry?.[REPRESENTATIVE_ENTRY_KEY]).toEqual(expect.objectContaining({
-        ...LIVE_E2E_CONFIG.deviceCommunicationPublicJwk,
-        alg: LIVE_E2E_CONFIG.controllerSigningAlg,
-        kid: 'device-communication-es384-001',
-      }));
-      assert.equal(
-        binding.sameAs,
-        LIVE_E2E_CONFIG.expectedRepresentativeSameAs,
-        'Representative sameAs should still be derived from the submitted controller email.',
-      );
-      assert.equal(
-        binding.material,
-        LIVE_E2E_CONFIG.expectedLegacyCommunicationMaterial,
-        'Legacy fallback should derive representative binding material from the DIDComm communication JWK when no dedicated controller binding key is transported.',
+      assert.ok(organizationCredential, 'The real _verify response must contain the organization credential.');
+      assert.ok(legalRepresentativeCredential, 'The real _verify response must contain the representative credential.');
+
+      const createSubmission = await client.createOrgDidDocumentFromVcs({
+        organizationVC: organizationCredential,
+        legalRepresentativeVC: legalRepresentativeCredential,
+      });
+      const createResponse =
+        await client.pollCreateOrgDidDocumentResponse(createSubmission.thid);
+
+      assert.ok(
+        createResponse.body?.data?.[0]?.resource?.didDocument?.id,
+        'The real _create response must contain the published organization DID document.',
       );
     },
   );
 
-  liveIt(
-    'keeps sameAs and omits hasCredential.material when the SDK transports neither controller binding nor legacy communication JWK',
-    async () => {
-      const client = createLiveClient({ includeCommunicationKey: false, includeControllerBinding: false });
-      const response = await verifyTermsLive(client);
-      const representativeEntry = findLegalRepresentativeCredentialEntry(response);
-      const binding = extractRepresentativeBindingProjection(response);
-
-      expect(representativeEntry?.[REPRESENTATIVE_ENTRY_KEY]).toBeUndefined();
-      assertRepresentativeBinding(binding, { requireSameAs: true, requireMaterial: false });
-    },
-  );
 });

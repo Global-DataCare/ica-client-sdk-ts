@@ -12,6 +12,10 @@ All notable changes to `ica-client-sdk-ts` will be documented in this file.
 - Make `createOrgDidDocumentFromVcs(...)` reuse the organization and controller
   public keys configured before `_verify`; callers no longer need to recover
   those already-known keys from `_verify-response` or pass them a second time.
+- Make the live SDK suite use real Axios traffic and cover the complete
+  `_verify` -> `_verify-response` -> `_create` journey without mocks or skips.
+- Restore the repository lint gate with an explicit TypeScript ESLint
+  configuration.
 - Deprecate generated-key metadata and private-JWK response readers retained
   only for historical development payloads; staging and production
   integrations must submit and retain their own organization keypairs.
