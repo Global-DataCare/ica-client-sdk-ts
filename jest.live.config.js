@@ -6,7 +6,6 @@ export default {
   setupFilesAfterEnv: ['<rootDir>/src/__tests__/jest.setup.ts'],
   testMatch: ['<rootDir>/src/**/*.test.ts'],
   moduleNameMapper: {
-    '^axios$': '<rootDir>/__mocks__/axios.ts',
     '^gdc-common-utils-ts/(.*)$': '<rootDir>/node_modules/gdc-common-utils-ts/dist/$1.js',
     '^(\\.{1,2}/.*)\\.js$': '$1',
   },
