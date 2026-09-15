@@ -692,6 +692,39 @@ describe('IcaClient', () => {
     });
   });
 
+  it('should reuse the controller binding key submitted to verify when creating the DID document from VCs', async () => {
+    mockedAxios.request
+      ?.mockResolvedValueOnce({ status: 202, headers: { location: '/verify', 'retry-after': '1' } })
+      ?.mockResolvedValueOnce({ status: 202, headers: { location: '/dummy', 'retry-after': '1' } });
+
+    client.setControllerBindingPublicKey('ES384', 'controller-binding-es384-001', {
+      kty: 'EC',
+      crv: 'P-384',
+      x: 'controller-x',
+      y: 'controller-y'
+    });
+
+    await client.verifyTerms('https://example.org/terms.pdf');
+    await client.createOrgDidDocumentFromVcs({
+      organizationIdentifier: 'did:web:org.example:animal-care:organization:taxid:VATES-1234'
+    });
+
+    const verifyPayload: any = mockedAxios.request.mock.calls[0]?.[0]?.data;
+    const createPayload: any = mockedAxios.request.mock.calls[1]?.[0]?.data;
+    const submittedControllerPublicKeyJwk =
+      verifyPayload?.body?.data?.[0]?.resource?.controller?.publicKeyJwk;
+    expect(submittedControllerPublicKeyJwk).toEqual({
+      kty: 'EC',
+      crv: 'P-384',
+      x: 'controller-x',
+      y: 'controller-y',
+      alg: 'ES384',
+      kid: 'controller-binding-es384-001'
+    });
+    expect(createPayload?.body?.data?.[0]?.resource?.controller?.publicKeyJwk)
+      .toEqual(submittedControllerPublicKeyJwk);
+  });
+
   it('should remove organization terms using the configured controller message-signing key', async () => {
     mockedAxios.request?.mockResolvedValueOnce({
       status: 202,

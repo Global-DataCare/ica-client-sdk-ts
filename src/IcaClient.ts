@@ -728,12 +728,13 @@ export class IcaClient {
     organizationPublicKeyJwk?: IcaJwk;
     organizationJwks?: IcaJwks;
     controllerSameAs?: string;
-    controllerPublicKeyJwk: IcaJwk;
+    controllerPublicKeyJwk?: IcaJwk;
     controllerJwks?: IcaJwks;
   }): Promise<{ thid: string; location: string }> {
     const extracted = this.extractDidDocumentFieldsFromVcs(options.organizationVC, options.legalRepresentativeVC);
 
     const organizationPublicKeyJwk = options.organizationPublicKeyJwk || this.buildConfiguredPublicJwk(this.credentialSigningPublicKey);
+    const controllerPublicKeyJwk = options.controllerPublicKeyJwk || this.buildConfiguredPublicJwk(this.controllerBindingPublicKey);
     const organizationIdentifier = options.organizationIdentifier || extracted.orgCredentialSubjectId;
     const controllerSameAs = options.controllerSameAs || extracted.controllerCredentialSubjectSameAs;
 
@@ -756,7 +757,7 @@ export class IcaClient {
       organization,
       controller: {
         ...(controllerSameAs ? { sameAs: controllerSameAs } : {}),
-        ...(options.controllerPublicKeyJwk ? { publicKeyJwk: options.controllerPublicKeyJwk } : {}),
+        ...(controllerPublicKeyJwk ? { publicKeyJwk: controllerPublicKeyJwk } : {}),
         ...(options.controllerJwks ? { jwks: options.controllerJwks } : {})
       }
     };
@@ -1318,7 +1319,11 @@ export class IcaClient {
     return this.getCredentialsFromVerifyResponse(response).organizationCredential;
   }
 
-  /** Returns only the caller-owned public organization key echoed by ICA. */
+  /**
+   * Returns the caller-owned public organization key echoed by ICA for
+   * optional continuity diagnostics. The caller's retained wallet/KMS record
+   * remains the operational source of truth.
+   */
   getOrganizationPublicKeyFromVerifyResponse(response: IcaVerifyTermsResponse): IcaJwk | undefined {
     return this.getResponseEntries<IcaVerifyTermsResource>(response)
       .find(candidate => this.isOrganizationCredentialEntry(candidate))
@@ -1341,7 +1346,9 @@ export class IcaClient {
   }
 
   /**
-   * Reads the public controller binding JWK transported outside a VC resource.
+   * Reads the public controller binding JWK echoed outside a VC resource for
+   * optional continuity diagnostics. The caller's retained key remains the
+   * operational source of truth.
    *
    * The representative-entry fallback is transport compatibility for old ICA
    * responses. It does not mean the LegalRepresentativeCredential grants
