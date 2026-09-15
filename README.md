@@ -221,12 +221,16 @@ const verifyResponse = await client.pollVerifyTermsResponse(thid);
 // - the payload fallback above is a demo/local convenience and should not
 //   replace signed `person.email` evidence in production
 
-// v2 bootstrap helpers:
-// - organization public/private JWK live outside resource on the organization entry
+// v2 public-key helpers:
+// - the caller-owned organization public JWK lives outside resource on the organization entry
 // - a separately bound controller JWK lives on the ServiceController entry
 // - a legacy representative-owned JWK lives on the legal representative entry
-const organizationKeyMaterial = client.getOrganizationKeyMaterialFromVerifyResponse(verifyResponse);
+const organizationPublicKeyJwk = client.getOrganizationPublicKeyFromVerifyResponse(verifyResponse);
 const controllerBindingPublicKey = client.getControllerBindingPublicKeyFromVerifyResponse(verifyResponse);
+
+if (!organizationPublicKeyJwk || !controllerBindingPublicKey) {
+  throw new Error('ICA _verify-response did not return the submitted public key bindings');
+}
 
 // Get VC JWT attachments from the DIDComm response
 const {
@@ -265,13 +269,13 @@ console.log(organizationControllerInfo[0]?.owner?.hasCredential);
 // - body.data[].resource.controller.publicKeyJwk is the controller business binding key
 // - the organization credential-signing key is sent as an extra JWK attachment
 //   during verifyTerms() if setOrgCredentialSigningPublicKey() is configured
-// - if the organization key was ICA-generated in _verify (keySource=generated),
-//   _create must send organization.publicKeyJwk again as explicit confirmation
+// - organizationPublicKeyJwk is the public key supplied by the
+//   organization; its private key stays exclusively in its wallet/KMS
 
 const { thid: createThid } = await client.createOrgDidDocument({
   organization: {
     identifier: 'did:web:globaldatacare.es:animal-care:organization:taxid:VATES-B00000000',
-    publicKeyJwk: organizationKeyMaterial.publicKeyJwk,
+    publicKeyJwk: organizationPublicKeyJwk,
     jwks: {
       keys: [
         {
@@ -309,7 +313,7 @@ const createResponse = await client.pollCreateOrgDidDocumentResponse(createThid)
 const { thid: derivedThid } = await client.createOrgDidDocumentFromVcs({
   organizationVC: organizationCredential,
   legalRepresentativeVC: legalRepresentativeCredential,
-  organizationPublicKeyJwk: organizationKeyMaterial.publicKeyJwk,
+  organizationPublicKeyJwk,
   controllerPublicKeyJwk: controllerBindingPublicKey
 });
 const derivedCreateResponse = await client.pollCreateOrgDidDocumentResponse(derivedThid);
@@ -426,7 +430,7 @@ Recommended SDK usage:
 - in `_create`, explicit `controller.publicKeyJwk` and `organization.publicKeyJwk` are still valid for v1 compatibility when no stored binding/bootstrap key exists yet
 - if `_verify` already stored the controller binding, an explicit `controller.publicKeyJwk` in `_create` must match it exactly
 - if `_verify` already stored the organization key, an explicit `organization.publicKeyJwk` in `_create` must match it exactly
-- if `_verify` returned `keySource: "generated"`, pass back `organizationKeyMaterial.publicKeyJwk` to `_create` as confirmation before publishing the DID document
+- `keySource: "generated"` and `privateKeyJwk` remain deprecated readers only for historical development responses; new integrations must submit and retain their own organization keypair
 
 ## V2 Binding
 
@@ -439,8 +443,9 @@ The communication key is for transport protection. It is not automatically the s
 
 The organization credential-signing key is separate:
 
-- send it as an extra `application/jwk+json` attachment in `_verify`, or
-- let ICA autogenerate `ES384` and read the returned `publicKeyJwk/privateKeyJwk` from `_verify-response`
+- send its public JWK as an extra `application/jwk+json` attachment in `_verify`
+- retain the private key exclusively in the organization wallet or KMS
+- never expect `privateKeyJwk` from `_verify-response`; it is deprecated historical compatibility and is unavailable in staging and production
 
 Important security rule:
 
@@ -449,7 +454,7 @@ Important security rule:
 - post-onboarding key addition or rotation must use a dedicated key-management endpoint, not `_verify`.
 - if `_verify` already bound a controller key, `_create` cannot replace it.
 - if `_verify` already stored an organization key, `_create` cannot replace it.
-- if ICA generated the organization keypair in `_verify`, the caller must keep it and confirm the same `publicKeyJwk` in `_create`.
+- ICA must not generate the organization keypair in staging or production.
 
 Today, the SDK can already transport both:
 
