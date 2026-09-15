@@ -195,7 +195,9 @@ export interface VerifyTermsOptions {
 export interface IcaBundleResponseEntry<TResource = unknown> {
   type?: string;
   publicKeyJwk?: IcaJwk;
+  /** @deprecated Historical development-only ICA responses. Organizations must retain their own private keys. */
   privateKeyJwk?: IcaJwk;
+  /** @deprecated `generated` identifies the retired ICA development bootstrap fallback. */
   keySource?: 'attachment' | 'generated';
   response?: {
     status?: string;
@@ -399,7 +401,9 @@ export interface RemoveOrganizationTermsRequest {
 
 export interface IcaVerifyResponseKeyMaterial {
   publicKeyJwk?: IcaJwk;
+  /** @deprecated Historical development-only ICA responses. Do not consume or persist this value. */
   privateKeyJwk?: IcaJwk;
+  /** @deprecated `generated` identifies the retired ICA development bootstrap fallback. */
   keySource?: 'attachment' | 'generated';
 }
 

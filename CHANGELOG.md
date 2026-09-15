@@ -4,6 +4,14 @@ All notable changes to `ica-client-sdk-ts` will be documented in this file.
 
 ## [Unreleased]
 
+## [2.0.14] - 2026-09-15
+
+- Add `getOrganizationPublicKeyFromVerifyResponse(...)` as the normal
+  caller-owned organization public-key reader.
+- Deprecate generated-key metadata and private-JWK response readers retained
+  only for historical development payloads; staging and production
+  integrations must submit and retain their own organization keypairs.
+
 ## [2.0.13] - 2026-08-20
 
 - Preserve typed `controllerPayload.did`, `controllerPayload.sameAs` and

@@ -1318,6 +1318,18 @@ export class IcaClient {
     return this.getCredentialsFromVerifyResponse(response).organizationCredential;
   }
 
+  /** Returns only the caller-owned public organization key echoed by ICA. */
+  getOrganizationPublicKeyFromVerifyResponse(response: IcaVerifyTermsResponse): IcaJwk | undefined {
+    return this.getResponseEntries<IcaVerifyTermsResource>(response)
+      .find(candidate => this.isOrganizationCredentialEntry(candidate))
+      ?.publicKeyJwk;
+  }
+
+  /**
+   * @deprecated Use `getOrganizationPublicKeyFromVerifyResponse`. Private key
+   * material exists only in historical development responses and must not be
+   * consumed or persisted by new integrations.
+   */
   getOrganizationKeyMaterialFromVerifyResponse(response: IcaVerifyTermsResponse): IcaVerifyResponseKeyMaterial {
     const entry = this.getResponseEntries<IcaVerifyTermsResource>(response)
       .find(candidate => this.isOrganizationCredentialEntry(candidate));

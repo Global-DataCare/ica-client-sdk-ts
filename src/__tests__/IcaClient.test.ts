@@ -1,3 +1,4 @@
+// Flow contract: reuse shared test fixtures and canonical types; do not introduce duplicated literals.
 import axios from 'axios';
 import { IcaClient, Sector } from '../IcaClient';
 import { IcaCrypto, IcaVerifyTermsResponse } from '../types';
@@ -994,6 +995,9 @@ describe('IcaClient', () => {
     expect(vcs.organizationVC).toBe('<vc-jwt-organization>');
     expect(vcs.legalRepresentativeVC).toBe('<vc-jwt-legal-representative>');
     expect(vcs.allVcs).toEqual(['<vc-jwt-organization>', '<vc-jwt-legal-representative>']);
+    expect(client.getOrganizationPublicKeyFromVerifyResponse(response)).toEqual(
+      expect.objectContaining({ kid: 'org-es384-001' })
+    );
     expect(client.getOrganizationKeyMaterialFromVerifyResponse(response)).toEqual({
       publicKeyJwk: expect.objectContaining({ kid: 'org-es384-001' }),
       privateKeyJwk: expect.objectContaining({ d: 'org-priv-d' }),
