@@ -134,27 +134,34 @@ client.setControllerMessageSigningPublicKey('ES384', 'controller-msg-es384-001',
   y: '<msg-y>'
 });
 
-client.setControllerBindingPublicKey('ES384', 'controller-binding-es384-001', {
+// Load these caller-owned public keys from the same wallet/KMS records that
+// hold their private counterparts. ICA never creates or returns the private keys.
+const controllerPublicKeyJwk = {
   kty: 'EC',
   crv: 'P-384',
   x: '<controller-binding-x>',
   y: '<controller-binding-y>'
-});
+};
+client.setControllerBindingPublicKey(
+  'ES384',
+  'controller-binding-es384-001',
+  controllerPublicKeyJwk
+);
 
-client.setOrgCredentialSigningPublicKey('ES384', 'org-cred-es384-001', {
+const organizationPublicKeyJwk = {
   kty: 'EC',
   crv: 'P-384',
   x: '<cred-x>',
   y: '<cred-y>'
-});
+};
+client.setOrgCredentialSigningPublicKey(
+  'ES384',
+  'org-cred-es384-001',
+  organizationPublicKeyJwk
+);
 
 // Set VP token (signed by frontend)
 client.setVpToken(signedVpToken);
-
-// Verify terms PDF
-const { thid, location } = await client.verifyTerms(pdfBytesOrLink, {
-  mediaType: 'application/pdf'
-});
 
 // If the signed PDF/certificate does not expose the representative email and
 // the BFF needs ICA to include representative credentialSubject.sameAs, the
@@ -169,7 +176,7 @@ const { thid, location } = await client.verifyTerms(pdfBytesOrLink, {
 // - send `legalRepresentativePayload.email` or `.sameAs`
 // - if you send `.sameAs` for an email-based identity, use the canonical
 //   `urn:multibase:z...` value, not `mailto:...`
-await client.verifyTerms(pdfBytesOrLink, {
+const { thid, location } = await client.verifyTerms(pdfBytesOrLink, {
   mediaType: 'application/pdf',
   legalRepresentativePayload: {
     email: 'controller@example.org'
@@ -178,8 +185,7 @@ await client.verifyTerms(pdfBytesOrLink, {
     // Build this once with gdc-common-utils-ts buildOrganizationDidWeb() +
     // buildProfessionalDidWeb(); ICA and GW then retain the same public actor.
     did: controllerDid,
-    sameAs: controllerSameAs,
-    publicKeyJwk: controllerBindingPublicKey
+    sameAs: controllerSameAs
   },
   meta: {
     jws: {
@@ -221,16 +227,15 @@ const verifyResponse = await client.pollVerifyTermsResponse(thid);
 // - the payload fallback above is a demo/local convenience and should not
 //   replace signed `person.email` evidence in production
 
-// v2 public-key helpers:
-// - the caller-owned organization public JWK lives outside resource on the organization entry
-// - a separately bound controller JWK lives on the ServiceController entry
-// - a legacy representative-owned JWK lives on the legal representative entry
-const organizationPublicKeyJwk = client.getOrganizationPublicKeyFromVerifyResponse(verifyResponse);
-const controllerBindingPublicKey = client.getControllerBindingPublicKeyFromVerifyResponse(verifyResponse);
+// Optional continuity diagnostics only. The operational source of truth is the
+// two caller-owned public keys retained above, not the response echo.
+const echoedOrganizationPublicKeyJwk =
+  client.getOrganizationPublicKeyFromVerifyResponse(verifyResponse);
+const echoedControllerPublicKeyJwk =
+  client.getControllerBindingPublicKeyFromVerifyResponse(verifyResponse);
 
-if (!organizationPublicKeyJwk || !controllerBindingPublicKey) {
-  throw new Error('ICA _verify-response did not return the submitted public key bindings');
-}
+// The SDK sent controllerPublicKeyJwk from setControllerBindingPublicKey(...)
+// during _verify and will reuse that same configured key during _create.
 
 // Get VC JWT attachments from the DIDComm response
 const {
@@ -263,8 +268,8 @@ console.log(organizationInfo?.makesOffer?.serviceType);
 console.log(legalRepresentativeInfo?.givenName);
 console.log(legalRepresentativeInfo?.familyName);
 console.log(legalRepresentativeInfo?.identifier); // National ID
-console.log(organizationControllerInfo[0]?.owner?.sameAs);
-console.log(organizationControllerInfo[0]?.owner?.hasCredential);
+console.log(serviceControllerInfo[0]?.owner?.sameAs);
+console.log(serviceControllerInfo[0]?.owner?.hasCredential);
 // - meta.jws.protected.jwk is the DIDComm communication key
 // - body.data[].resource.controller.publicKeyJwk is the controller business binding key
 // - the organization credential-signing key is sent as an extra JWK attachment
@@ -292,7 +297,7 @@ const { thid: createThid } = await client.createOrgDidDocument({
   },
   controller: {
     sameAs: 'urn:multibase:zControllerHash',
-    publicKeyJwk: controllerBindingPublicKey,
+    publicKeyJwk: controllerPublicKeyJwk,
     jwks: {
       keys: [
         {
@@ -313,8 +318,8 @@ const createResponse = await client.pollCreateOrgDidDocumentResponse(createThid)
 const { thid: derivedThid } = await client.createOrgDidDocumentFromVcs({
   organizationVC: organizationCredential,
   legalRepresentativeVC: legalRepresentativeCredential,
-  organizationPublicKeyJwk,
-  controllerPublicKeyJwk: controllerBindingPublicKey
+  // No key arguments are needed here: the SDK reuses the exact public keys
+  // retained by the two set...PublicKey(...) calls before _verify.
 });
 const derivedCreateResponse = await client.pollCreateOrgDidDocumentResponse(derivedThid);
 
@@ -427,6 +432,8 @@ Recommended SDK usage:
 - `setControllerMessageSigningPublicKey(alg, kid, jwk)` for DIDComm communication protection
 - `setControllerBindingPublicKey(alg, kid, jwk)` for the controller business binding projected into `credentialSubject.hasCredential.material`
 - `setOrgCredentialSigningPublicKey(alg, kid, jwk)` to send the organization public JWK attachment in `_verify`
+- `createOrgDidDocumentFromVcs(...)` reuses both configured public keys; do not
+  read them back from `_verify-response` merely to pass them again
 - in `_create`, explicit `controller.publicKeyJwk` and `organization.publicKeyJwk` are still valid for v1 compatibility when no stored binding/bootstrap key exists yet
 - if `_verify` already stored the controller binding, an explicit `controller.publicKeyJwk` in `_create` must match it exactly
 - if `_verify` already stored the organization key, an explicit `organization.publicKeyJwk` in `_create` must match it exactly
@@ -563,10 +570,11 @@ type VerifyResponse = {
 - `getServiceControllerCredentialsFromVerifyResponse(response)`
 - `getServiceControllerInfoFromVerifyResponse(response)`
 - `getOrganizationInfoFromVerifyResponse(response)`
-Using the `dataspace-ica-ts` OpenAPI example, the main fields come from:
+- `getOrganizationPublicKeyFromVerifyResponse(response)` for an optional echo check
+- `getControllerBindingPublicKeyFromVerifyResponse(response)` for an optional echo check
 
-- `response.body.data[1].resource.credentialSubject.familyName`
-- `response.body.data[1].resource.credentialSubject.identifier`
+Do not depend on a fixed `body.data[]` position. Use the typed helpers above;
+Bundle entry order is not stable.
 
 ## Features
 
