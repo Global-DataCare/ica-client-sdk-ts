@@ -1,6 +1,6 @@
 {
   "name": "ica-client-sdk-ts",
-  "version": "2.0.14",
+  "version": "2.0.15",
   "type": "module",
   "description": "ICA Client SDK for TypeScript, supporting React and React Native, for interacting with dataspace-ica-ts services via DIDComm.",
   "main": "dist/index.js",
@@ -14,6 +14,7 @@
   },
   "scripts": {
     "build": "tsc",
+    "pretest": "node --test test/isolated-discovery.test.mjs",
     "test": "NODE_OPTIONS=--experimental-vm-modules ICA_BASE_URL=http://localhost:3310 jest",
     "test:local": "NODE_OPTIONS=--experimental-vm-modules ICA_BASE_URL=http://localhost:3310 jest",
     "test:binding": "NODE_OPTIONS=--experimental-vm-modules jest --config ./jest.live.config.js --runInBand --runTestsByPath src/__tests__/controllerBinding.test.ts",

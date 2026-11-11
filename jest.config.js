@@ -2,11 +2,11 @@
 export default {
   preset: 'ts-jest/presets/default-esm',
   testEnvironment: 'node',
+  watchman: false,
   extensionsToTreatAsEsm: ['.ts'],
   testMatch: ['<rootDir>/src/**/*.test.ts'],
   setupFilesAfterEnv: ['<rootDir>/src/__tests__/jest.setup.ts'],
   testPathIgnorePatterns: [
-    '<rootDir>/src/__tests__/controllerBinding.test.ts',
     '<rootDir>/src/__tests__/IcaClient.live.test.ts',
   ],
   moduleNameMapper: {

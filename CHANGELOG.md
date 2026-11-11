@@ -4,6 +4,11 @@ All notable changes to `ica-client-sdk-ts` will be documented in this file.
 
 ## [Unreleased]
 
+## [2.0.15] - 2026-11-11
+
+- Include controller-binding tests in the default isolated suite and fail its
+  discovery check if either isolated test file is omitted.
+
 ## [2.0.14] - 2026-09-15
 
 - Add `getOrganizationPublicKeyFromVerifyResponse(...)` as the normal

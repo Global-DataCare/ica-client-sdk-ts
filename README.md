@@ -581,13 +581,18 @@ Bundle entry order is not stable.
 
 ## Testing
 
-Run tests against local ICA instance:
+Install the locked dependencies and run the isolated client and controller-binding
+suites. The discovery guard fails if either file is omitted:
 
 ```bash
+npm ci
 npm test
 ```
 
-Ensure ICA is running on port 3310.
+Run `npm run test:live` separately against a real ICA instance on port 3310,
+with the signed PDF supplied through `ICA_LIVE_E2E_PDF_PATH`. The isolated tests
+do not replace this HTTP journey. Keep the service's test/demo configuration
+and signing trust scope explicit in the resulting evidence.
 
 ## Shared Utilities
 
@@ -719,3 +724,7 @@ After binding is `bound`, runtime token issuance uses `_code -> _token -> _excha
 ## Roadmap and Briefing
 - `BRIEFING_DATASPACE_EN.md`
 - `TODO_ROADMAP.md`
+
+## Entregable E9 — pruebas unitarias y testeo
+
+La [validación local completa del 11 de noviembre](deliverables/e9-testing/20261111T121038Z/README.md) contiene la matriz superada y sus registros.

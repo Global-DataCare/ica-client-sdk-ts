@@ -1,0 +1,149 @@
+{
+  "schemaVersion": "gdc.e9.testing/v1",
+  "expediente": "E9-20261111T121038Z",
+  "scope": "component subset",
+  "status": "SUPERADO_COMPONENTE",
+  "executionDate": "2026-11-11",
+  "platform": "macOS (Darwin)",
+  "node": "v26.13.0",
+  "npm": "11.20.0",
+  "sources": {
+    "ica-client-sdk-ts": {
+      "repository": "ica-client-sdk-ts",
+      "version": "2.0.15",
+      "commit": "fdf97b553bfa4c130d8648c2a521abe8a8781e60"
+    }
+  },
+  "suites": [
+    {
+      "id": "ica-client-isolated",
+      "source": {
+        "repository": "ica-client-sdk-ts",
+        "version": "2.0.15",
+        "commit": "fdf97b553bfa4c130d8648c2a521abe8a8781e60"
+      },
+      "node": "v26.13.0",
+      "npm": "11.20.0",
+      "command": [
+        "npm",
+        "test",
+        "--",
+        "--runInBand"
+      ],
+      "exitCode": 0,
+      "startedAt": "2026-11-11T12:43:11.753565+00:00",
+      "finishedAt": "2026-11-11T12:43:15.873019+00:00",
+      "elapsedSeconds": 3.513,
+      "tests": {
+        "total": 52,
+        "passed": 52,
+        "failed": 0,
+        "skipped": 0,
+        "cancelled": 0,
+        "pending": 0
+      },
+      "log": {
+        "path": "logs/ica-client-isolated.log",
+        "originalSha256": "5d64c39981d4015c90cef037c3cb85f35245486c89d56830ac432c495caea03e",
+        "sha256": "5d64c39981d4015c90cef037c3cb85f35245486c89d56830ac432c495caea03e"
+      },
+      "provenance": "provenance/ica-client-isolated.json"
+    },
+    {
+      "id": "ica-client-live",
+      "source": {
+        "repository": "ica-client-sdk-ts",
+        "version": "2.0.15",
+        "commit": "fdf97b553bfa4c130d8648c2a521abe8a8781e60"
+      },
+      "node": "v26.13.0",
+      "npm": "11.20.0",
+      "command": [
+        "env",
+        "ICA_LIVE_E2E=1",
+        "ICA_BASE_URL=http://127.0.0.1:33310",
+        "ICA_LIVE_E2E_PDF_PATH=<PRIVATE_PDF_SHA256:cd34eba11a8b73c20eefc4fa7de7d3ba99bc588d3c015aa98b830bd5116c66f4>",
+        "node",
+        "--experimental-vm-modules",
+        "node_modules/jest/bin/jest.js",
+        "--config",
+        "./jest.live.config.js",
+        "--runInBand",
+        "--runTestsByPath",
+        "src/__tests__/IcaClient.live.test.ts"
+      ],
+      "exitCode": 0,
+      "startedAt": "2026-11-11T12:44:36.450424+00:00",
+      "finishedAt": "2026-11-11T12:44:49.237105+00:00",
+      "elapsedSeconds": 12.202,
+      "tests": {
+        "total": 2,
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0,
+        "cancelled": 0,
+        "pending": 0
+      },
+      "log": {
+        "path": "logs/ica-client-live.log",
+        "originalSha256": "b3545860d613c71b0fc9e3ede861729b4b24c866c0b03466e13c5445a98cf197",
+        "sha256": "b3545860d613c71b0fc9e3ede861729b4b24c866c0b03466e13c5445a98cf197"
+      },
+      "provenance": "provenance/ica-client-live.json"
+    }
+  ],
+  "checks": [
+    {
+      "repository": "ica-client-sdk-ts",
+      "label": "03-install-fixed",
+      "exitCode": 0,
+      "log": {
+        "path": "checks/ica-client-sdk-ts-03-install-fixed.log",
+        "sha256": "68f39e13f5b5040882533bfe4e1433cef26ffa434218fe25ff10dce299d5a24d"
+      }
+    },
+    {
+      "repository": "ica-client-sdk-ts",
+      "label": "final-esm",
+      "exitCode": 0,
+      "log": {
+        "path": "checks/ica-client-sdk-ts-final-esm.log",
+        "sha256": "b033afcc92b5ceeeeefe4980d887ad01789c411ca1c56c37f4701065636b4feb"
+      }
+    },
+    {
+      "repository": "ica-client-sdk-ts",
+      "label": "final-lint",
+      "exitCode": 0,
+      "log": {
+        "path": "checks/ica-client-sdk-ts-final-lint.log",
+        "sha256": "e6f87aafe5ea7ff59976d6a885af5666cd6691b2a6c6e100e68565e88ce267fe"
+      }
+    },
+    {
+      "repository": "ica-client-sdk-ts",
+      "label": "final-dependencies",
+      "exitCode": 0,
+      "log": {
+        "path": "checks/ica-client-sdk-ts-final-dependencies.log",
+        "sha256": "6dde3f174323be0ca0da132dbb1ee5ed735baa24e9870bdd5f57f32dd481baeb"
+      }
+    }
+  ],
+  "privateInputSha256": {
+    "signed-fnmt-multisign": "cd34eba11a8b73c20eefc4fa7de7d3ba99bc588d3c015aa98b830bd5116c66f4"
+  },
+  "sanitization": [
+    "local workspace and home paths normalized",
+    "private signed PDF paths replaced by content hashes",
+    "private organization identifiers replaced by hashes",
+    "compact local tokens and private PEMs redacted if present",
+    "test names, outcomes, counters and commands otherwise preserved",
+    "console line endings normalized to LF"
+  ],
+  "publication": {
+    "gitBranch": "main",
+    "npmPublish": "not performed",
+    "imagesOrDeployment": "not performed"
+  }
+}
