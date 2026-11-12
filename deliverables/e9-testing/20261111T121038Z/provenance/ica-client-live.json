@@ -54,8 +54,9 @@
     },
     "gwtemplate-node-ts": {
       "commit": "ea8abae0f8c13e817d9241881f169e9400833d9a",
-      "version": "1.25.34",
-      "working_tree": ""
+      "version": "1.25.33",
+      "working_tree": "",
+      "recordedVersion": "1.25.34"
     }
   },
   "package.json_sha256": "27c51174e8798526254e07bd35d7ea6178b770da459e1234eb15de82f7780252",
